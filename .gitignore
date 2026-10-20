@@ -38,3 +38,18 @@ docs/super-board/runs/**/*.trace.zip
 
 # claude plugin eval output
 evals/results/
+
+# Local installed pack and helper resources for this pilot
+.agents/
+.pi/
+.codex/
+.claude/bin/
+.claude/skills/
+.claude/hooks/
+.claude/workflows/
+.claude/super-board/backup/
+.claude/super-board/onboard-answers.json
+.claude/super-board/onboard-staged/
+.claude/super-board/upgrade.json
+skills-lock.json
+.claude/settings.json.bak-*

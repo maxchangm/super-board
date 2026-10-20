@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "description": "Single-issue Pi Build, QA and Review pilot",
+  "project": {
+    "owner": "maxchangm",
+    "title": "Super Board Pi pilot",
+    "number": 4
+  },
+  "host": "pi",
+  "worker_backend": "workflow",
+  "pi": {
+    "provider": "openai",
+    "model": "gpt-6.1-sol"
+  },
+  "target": {
+    "type": "repo",
+    "url": null
+  },
+  "repo": {
+    "path": "/Users/maxchan/.codex/worktrees/super-board-pi-pilot/super-board",
+    "remote": "https://github.com/maxchangm/super-board"
+  },
+  "base_branch": "codex/pi-pilot-20261020",
+  "timezone": "Asia/Hong_Kong",
+  "columns": [
+    "Backlog",
+    "Ready",
+    "Building",
+    "QA",
+    "Review",
+    "Blocked",
+    "Done"
+  ],
+  "labels": [
+    "qa",
+    "bug",
+    "feature"
+  ],
+  "paths": {
+    "project_md": "docs/super-board/PROJECT.md",
+    "pre_flight_md": "docs/super-board/pre-flight.md",
+    "runs_dir": "docs/super-board/runs"
+  },
+  "human_approves_merge": false,
+  "merge_policy": {
+    "default": "auto",
+    "auto_max_lines": 400,
+    "allow_auto_on_production": false
+  },
+  "migrations": {
+    "allowed_envs": [],
+    "target_env": "staging",
+    "commands": {},
+    "checks": {},
+    "human_steps": []
+  },
+  "verify_commands": [
+    "bash tests/run-safety.sh"
+  ],
+  "truth_gate": "non-trivial",
+  "truth_threshold": 70,
+  "max_workers": 1,
+  "rebuild_cap": 2,
+  "no_progress_cycles": 3,
+  "max_dispatches": 6,
+  "block_rate_alert_pct": 30,
+  "calibration": {
+    "enabled": false
+  },
+  "notifications": {
+    "channel": "session",
+    "chat_id": null,
+    "bot_identity": "maxchangm"
+  },
+  "collect": {
+    "sources": [
+      "github",
+      "prs"
+    ]
+  }
+}
