@@ -1,0 +1,78 @@
+Command: bash tests/run-safety.sh
+Checkout: e074641da8e6b14061bc589b808de5d378e15357 (QA evidence staged)
+Started (UTC): 2026-10-20T10:02:10.114760+00:00
+Duration: 377.97 seconds
+Exit: 0
+Result: PASS: 68 safety suites
+Full output SHA-256: 8e4f420337e1d25a8021b027f1283c81049932aa5ae8f7cf5eb4fe2c5f4f2066
+Full output: 909 lines, captured locally at /tmp/pi-issue-2-qa-safety-final-full.log
+The following suite list is condensed from the full output. No ::error:: or Failed suite: lines occurred.
+
+PASS: tests/test-agents-md.sh
+PASS: tests/test-card.sh
+PASS: tests/test-cleanup-wt.sh
+PASS: tests/test-codex-lane.sh
+PASS: tests/test-codex-stop.sh
+PASS: tests/test-codex-wave-contract.sh
+PASS: tests/test-collect-baseline.sh
+PASS: tests/test-collect-custom.sh
+PASS: tests/test-collect-fetchers.sh
+PASS: tests/test-collect-file.sh
+PASS: tests/test-deps.sh
+PASS: tests/test-env-check.sh
+PASS: tests/test-file-bug.sh
+PASS: tests/test-file-refactor.sh
+PASS: tests/test-get.sh
+PASS: tests/test-guard-hooks.sh
+PASS: tests/test-host.sh
+PASS: tests/test-hosts-doc.sh
+PASS: tests/test-install.sh
+PASS: tests/test-merge-gate.sh
+PASS: tests/test-pi-lane.sh
+PASS: tests/test-pr-body.sh
+PASS: tests/test-preflight.sh
+PASS: tests/test-readme-sync.sh
+PASS: tests/test-release.sh
+PASS: tests/test-run-gates.sh
+PASS: tests/test-safety-runner.sh
+PASS: tests/test-settings.sh
+PASS: tests/test-setup.sh
+PASS: tests/test-throttle.sh
+PASS: tests/test-ui-refine-loop-setup.sh
+PASS: tests/test-ui-refine-loop-workflow.sh
+PASS: tests/test-usage.sh
+PASS: tests/test-wave-plan.sh
+PASS: tests/test-wave-preflight.sh
+PASS: tests/test-wave-review-memory.sh
+PASS: tests/test-workflow-halt.sh
+PASS: tests/test_approval.py
+PASS: tests/test_calibration.py
+PASS: tests/test_codex_lane_schema.py
+PASS: tests/test_collect_baseline.py
+PASS: tests/test_collect_custom.py
+PASS: tests/test_collect_fetchers.py
+PASS: tests/test_collect_intake_safety.py
+PASS: tests/test_collect_windows.py
+PASS: tests/test_github_reads.py
+PASS: tests/test_merge_policy.py
+PASS: tests/test_pi_guards.py
+PASS: tests/test_project_verifier.py
+PASS: tests/test_repair_budget.py
+PASS: tests/test_repair_wave.py
+PASS: tests/test_run_allowlist.py
+PASS: tests/test_runtime_compare.py
+PASS: tests/test_setup_helpers.py
+PASS: tests/test_skill_dispatch.py
+PASS: tests/test_skills_readiness.py
+PASS: tests/test_status_parse.py
+PASS: tests/test_upgrade_recovery.py
+PASS: tests/test_verification_readiness.py
+PASS: tests/test_visual_chrome_cleanup.py
+PASS: tests/test_visual_details.py
+PASS: tests/test_visual_families.py
+PASS: tests/test_visual_interactions.py
+PASS: tests/test_visual_lanes.py
+PASS: tests/test_visual_main_steps.py
+PASS: tests/test_visual_source_base.py
+PASS: tests/test_worktree_paths.py
+PASS: tests/test_writing_format.py

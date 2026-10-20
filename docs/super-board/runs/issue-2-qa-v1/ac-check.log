@@ -1,0 +1,23 @@
+Command: python3 docs/super-board/runs/issue-2-qa-v1/check-ac.py --ref origin/codex/pi-pilot-20261020
+Expected: exit 1 for the original Pi documentation omissions
+FAIL: AC1: usage names all four supported hosts
+FAIL: AC2: installation contract names all four supported hosts
+FAIL: AC2: .pi/ shares the existing optional-host conditions
+PASS: AC3: diff contains only the two documentation locations and QA evidence
+PASS: AC3: installer non-comment content is byte-for-byte unchanged
+PASS: AC3: authoring rules outside the installation contract are unchanged
+PASS: AC3: whitespace check succeeds
+Result: 3 failed checks
+Exit: 1
+
+Command: python3 docs/super-board/runs/issue-2-qa-v1/check-ac.py
+PASS: AC1: usage names all four supported hosts
+PASS: AC1: actual --help exposes Pi
+PASS: AC2: installation contract names all four supported hosts
+PASS: AC2: .pi/ shares the existing optional-host conditions
+PASS: AC3: diff contains only the two documentation locations and QA evidence
+PASS: AC3: installer non-comment content is byte-for-byte unchanged
+PASS: AC3: authoring rules outside the installation contract are unchanged
+PASS: AC3: whitespace check succeeds
+Result: 0 failed checks
+Exit: 0
