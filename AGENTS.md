@@ -3,7 +3,13 @@
 Read `CLAUDE.md` for the repository authoring rules. Preserve its existing content.
 Never invoke task-observer or its protocol.
 
-The owner authorized one real documentation issue on the dedicated Pi pilot board.
+The owner authorized issue #4, configured checkout mismatch refusal, on the dedicated Pi pilot board.
+Pi lane workers own all product implementation, QA and Review. Never add a co-author trailer.
+Use pstack:poteto-mode at `/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
+The synthesized design and baseline proof are in
+`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/pi-improvement-20261020/`.
+Read `design.md`. First commit a failing regression, then implement the fix.
+Keep evidence concise. Do not add another checker that duplicates the regression suite.
 Use `.claude/super-board/configs/pi-pilot.json`. The only merge destination is
 `codex/pi-pilot-20261020`. Do not deploy or create a release tag.
 Read the current issue and acceptance criteria before editing.
