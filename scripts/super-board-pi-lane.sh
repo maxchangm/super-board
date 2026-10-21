@@ -8,9 +8,11 @@ import json
 import os
 from pathlib import Path
 import runpy
+import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 
 def fail(message, code=64):
     print(message, file=sys.stderr)
@@ -87,11 +89,24 @@ if not skills['ready']:
     result('halted', 'skills-readiness: missing ' + ', '.join(dict.fromkeys(e['name'] for e in skills['entries'] if e['status'] == 'missing')))
     sys.exit(10)
 
+try:
+    cards_path = Path(tempfile.mkdtemp(prefix='super-board-pi-')) / 'cards.json'
+    cards_path.write_text(json.dumps([card]) + '\n')
+except OSError as error:
+    result('halted', 'skills-readiness: cannot save hydrated Card: ' + str(error))
+    sys.exit(64)
+recheck = shlex.join([sys.executable, str(resolver_path), '--root', str(root), '--host', 'pi',
+                      '--cards', str(cards_path), '--lane', args.lane])
+
 skill = {'build': 'super-build', 'qa': 'super-qa', 'review': 'super-review'}[args.lane]
 section = {'build': 'Builder', 'qa': 'Tester', 'review': 'Reviewer'}[args.lane]
 prompt = f'''Run {skill} for issue #{card['number']} as a Pi lane worker.
 The dispatcher owns canonical repair-state transitions for this wave. It persisted Card.repairReservation before dispatch when present. Consume that attempt once, write normal failure proof on the issue/PR and return the outcome. Do not reserve again or modify the canonical machine state or repair-count/phase labels; the dispatcher records completion. Initial implementation and read-only verification are not repairs. A fresh independent diagnosis must precede any final targeted repair. For phase final, target diagnosis_cause only and use diagnosis_test to falsify that cause before changing code.
-First operation: recheck .claude/bin/super-board-skills-ready.py --root {root} --host pi --cards - --lane {args.lane} with the Card JSON below as a one-element stdin array, before worktree creation, classification or lifecycle writes. Exit 10 means status=halted, detail=skills-readiness:, preserve all state. Load resolved_path files and only declared fallback IDs from the report. Before activating any conditional helper, repeat with --require <exact-name>.
+First operation: recheck with the exact command below, before worktree creation, classification or lifecycle writes.
+```sh
+{recheck}
+```
+The saved JSON array contains the complete hydrated Card, including repairReservation when present. Keep Card data out of shell commands. Preserve this snapshot across a halt or interruption as evidence. Exit 10 means status=halted, detail=skills-readiness:, preserve all state. Load resolved_path files and only declared fallback IDs from the report. Before activating any conditional helper, repeat the same file-based command with --require <exact-name>.
 Resolved skill report: {json.dumps(skills)}
 Config: {config_path}
 Card: {json.dumps(card)}
