@@ -26,6 +26,12 @@ intentional stacked correction from this observed defect, not a duplicate fix.
 Proceed with the appropriate preflight conflict note. PR #1 currently closes no
 separate implementation issue. Do not modify or merge PR #1 from this #12 lane.
 
+Required diff-read protocol for every lane and author-note pass:
+First capture complete metadata through `super-board-github-read.py --kind metadata`
+with `pr view N --json files,labels,body,additions,deletions,changedFiles,headRefOid`.
+Then use `--kind diff --meta <that-file>` with `pr diff N`. Never omit --meta.
+A missing --meta paused this actual run. Preserve the halt until explicit validated recovery.
+
 Issue worktrees do not copy ignored installed resources. Invoke installed helpers
 and skills by absolute path under the configured project root when absent in your
 worktree. Never commit copied pack files or helpers. Keep raw evidence in
