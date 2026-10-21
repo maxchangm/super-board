@@ -1,28 +1,35 @@
-# Super Board acceptance instructions
+# Super Board focused repair instructions
 
-Read CLAUDE.md. Never invoke task-observer. Never add a co-author trailer.
-The owner authorized finishing the reviewed integration and its acceptance through
-Project #4 linked to maxchangm/super-board. The board is now named Super Board.
-Use `.claude/super-board/configs/super-board.json` for this acceptance wave.
-The permitted merge destination for acceptance reports is `codex/pi-pilot-20261020`.
-Do not deploy or create a release tag. Never merge fault-injection fixtures.
+Read CLAUDE.md. Never invoke task-observer or its protocol. Never add a co-author trailer.
+The owner authorized finishing this reviewed integration through Project #4 linked
+to maxchangm/super-board, named Super Board. Claude acceptance is deferred at the
+owner's explicit request. All active product work uses Pi.
 
-Pi lane workers own implementation, QA and Review. Read the assigned issue and all
-comments. Issue #7 owns remaining live Pi boundary acceptance. Claude acceptance is
-tracked as blocked in #6 because Claude Code is signed out. Preserve that distinction.
-Run issue-scoped QA under run.md, not standalone super-qa route crawling or another board.
-Use pstack:poteto-mode at
+Current phase: fix issue #12, absent repair-phase display labels. Use
+`.claude/super-board/configs/super-board.json`. The only permitted merge destination
+for this focused fix is `codex/pi-pilot-20261020`. Do not deploy or create a release tag.
+Pi lane workers own implementation, QA and Review. Use pstack:poteto-mode at
 `/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
-Do not change product scripts, skills or policy mid-run. File a focused defect if needed.
-Keep reports small. Keep raw logs outside tracked files in
-`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/`.
+Read issue #12 and all comments. Commit a failing faithful regression before the
+small shared fix. Preserve the canonical record, ownership, counts, failure halts
+and head-bound merge policy. Do not add a runner or an evaluation framework.
 
-Issue worktrees share Git history but do not copy ignored installed resources.
-Invoke helpers and skills by absolute path under the configured `repo.path` when
-an issue worktree has no installed pack. Never commit copied pack files or helpers.
-Disposable child fixture checkouts need their own correctly pinned config.repo.path
-and lifecycle ownership. Use this same repo-linked Project #4 and isolated branches.
-Never run two dispatchers against the same fixture. Preserve dirty or halted work.
+The real acceptance run halted and all owned worker processes exited. Issue #9
+has one persisted idle canonical record with repairs=0 and pending_lane=build.
+The failed command partially applied loop:rebuild-0. No mutation was replayed.
+Preserve all halted issue #7/#8/#9 worktrees, claims, branches and draft PRs.
+Do not resume fixtures or reset their state as part of #12. After this fix is
+independently accepted, the coordinator will explicitly resume acceptance #7.
+
+PR #1 is the existing integration delivery. Its overlapping helper paths are an
+intentional stacked correction from this observed defect, not a duplicate fix.
+Proceed with the appropriate preflight conflict note. PR #1 currently closes no
+separate implementation issue. Do not modify or merge PR #1 from this #12 lane.
+
+Issue worktrees do not copy ignored installed resources. Invoke installed helpers
+and skills by absolute path under the configured project root when absent in your
+worktree. Never commit copied pack files or helpers. Keep raw evidence in
+`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/`.
 
 <!-- super-board:begin v3.1.2 (managed; edits inside are overwritten on upgrade) -->
 ## Super Board
