@@ -1,23 +1,28 @@
-# Pilot repository instructions
+# Super Board acceptance instructions
 
-Read `CLAUDE.md` for the repository authoring rules. Preserve its existing content.
-Never invoke task-observer or its protocol.
+Read CLAUDE.md. Never invoke task-observer. Never add a co-author trailer.
+The owner authorized finishing the reviewed integration and its acceptance through
+Project #4 linked to maxchangm/super-board. The board is now named Super Board.
+Use `.claude/super-board/configs/super-board.json` for this acceptance wave.
+The permitted merge destination for acceptance reports is `codex/pi-pilot-20261020`.
+Do not deploy or create a release tag. Never merge fault-injection fixtures.
 
-The owner authorized issue #4, configured checkout mismatch refusal, on the dedicated Pi pilot board.
-Pi lane workers own all product implementation, QA and Review. Never add a co-author trailer.
-Use pstack:poteto-mode at `/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
-The synthesized design and baseline proof are in
-`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/pi-improvement-20261020/`.
-Read `design.md`. First commit a failing regression, then implement the fix.
-Keep evidence concise. Do not add another checker that duplicates the regression suite.
-Use `.claude/super-board/configs/pi-pilot.json`. The only merge destination is
-`codex/pi-pilot-20261020`. Do not deploy or create a release tag.
-Read the current issue and acceptance criteria before editing.
+Pi lane workers own implementation, QA and Review. Read the assigned issue and all
+comments. Issue #7 owns remaining live Pi boundary acceptance. Claude acceptance is
+tracked as blocked in #6 because Claude Code is signed out. Preserve that distinction.
+Run issue-scoped QA under run.md, not standalone super-qa route crawling or another board.
+Use pstack:poteto-mode at
+`/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
+Do not change product scripts, skills or policy mid-run. File a focused defect if needed.
+Keep reports small. Keep raw logs outside tracked files in
+`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/`.
 
-The pack is installed locally in the configured `repo.path`. Issue worktrees share
-Git history but do not copy ignored installed resources. When an installed helper is
-not present in an issue worktree, invoke it through its absolute path under the
-configured project checkout. Do not add copied pack files or helper skills to commits.
+Issue worktrees share Git history but do not copy ignored installed resources.
+Invoke helpers and skills by absolute path under the configured `repo.path` when
+an issue worktree has no installed pack. Never commit copied pack files or helpers.
+Disposable child fixture checkouts need their own correctly pinned config.repo.path
+and lifecycle ownership. Use this same repo-linked Project #4 and isolated branches.
+Never run two dispatchers against the same fixture. Preserve dirty or halted work.
 
 <!-- super-board:begin v3.1.2 (managed; edits inside are overwritten on upgrade) -->
 ## Super Board

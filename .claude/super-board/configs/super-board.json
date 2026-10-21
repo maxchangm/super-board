@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "description": "Single-issue Pi Build, QA and Review pilot",
+  "description": "Repository-linked Super Board acceptance and delivery",
   "project": {
     "owner": "maxchangm",
-    "title": "Super Board Pi pilot",
+    "title": "Super Board",
     "number": 4
   },
   "host": "pi",
