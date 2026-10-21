@@ -154,6 +154,30 @@ class RepairWave(unittest.TestCase):
                 self.assertEqual(len(self.data()['label_edits']),1)
                 self.assertEqual(lock.read_text(),claim)
 
+    def test_successful_completions_retain_counts_and_clear_phase_labels(self):
+        def event(name,**options):
+            command=[sys.executable,str(self.root/'.claude/bin/super-board-repair.py'),name,
+                     '--issue','1','--owner','owner']
+            for key,value in options.items():command.extend(['--'+key.replace('_','-'),value])
+            result=subprocess.run(command,cwd=self.root,env=self.env,capture_output=True,text=True,check=True)
+            return json.loads(result.stdout)
+        event('failed',cause='failure',pending_lane='build')
+        for count in (1,2):
+            reserved=event('reserve');self.assertEqual(reserved['repairs'],count)
+            completed=event('succeeded')
+            self.assertEqual((completed['phase'],completed['repairs']),('idle',count))
+            self.assertNotIn('owner',completed)
+            self.assertEqual([x for x in self.data()['labels'] if x.startswith('loop:repair-')],[])
+        self.assertEqual(event('reserve')['phase'],'diagnosis')
+        event('diagnosed',cause='new cause',test='test -f proof expects failure')
+        self.assertEqual(event('reserve')['phase'],'final')
+        self.assertEqual([x for x in self.data()['labels'] if x.startswith('loop:repair-')],['loop:repair-final'])
+        completed=event('succeeded')
+        self.assertEqual((completed['phase'],completed['repairs']),('idle',2))
+        self.assertTrue(completed['diagnosis_used']);self.assertTrue(completed['final_used'])
+        self.assertEqual([x for x in self.data()['labels'] if x.startswith('loop:repair-')],[])
+        self.assertIn('docs',self.data()['labels']);self.assertEqual(len(self.data()['comments']),1)
+
     def test_both_hosts_diagnosis_without_new_cause_blocks_without_final(self):
         for host in ['codex','pi']:
             with self.subTest(host=host):
