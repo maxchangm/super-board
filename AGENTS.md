@@ -1,46 +1,32 @@
-# Super Board live acceptance restart
+# Super Board focused readiness fix
 
-Read CLAUDE.md. Never invoke task-observer or its protocol. Never add a co-author trailer.
-The owner authorized finishing the integration through repository-linked Project #4,
-Super Board. Claude live acceptance is explicitly deferred. Use Pi, not Claude.
-All product work remains in Pi lanes. Current phase: finish issue #7 acceptance.
-Use `.claude/super-board/configs/super-board.json`; report merge target is
-`codex/pi-pilot-20261020`. No production deployment or release tag.
+Read CLAUDE.md. Never invoke task-observer or its protocol. Never add a co-author.
+The owner authorized finishing the integration using repository-linked Project4.
+Claude live acceptance is deferred. Use Pi. Parent is orchestration only.
+Current phase: only issue14, keep readiness Card data outside shell commands.
+Use .claude/super-board/configs/super-board.json, base codex/pi-pilot-20261020.
+Issue7 and its retained fixtures8/9 are held and must not be changed by this fix.
+No patch to guard-secrets, guard policy, canonical repair state or budgets.
 
-Fix #12 is independently accepted as merge51aac56 (PR13). The accepted helper was
-refreshed in the pilot and both preserved fixture roots; hashes match. Code carried
-into source PR1 as2d2c9e5. Do not edit product scripts, skills or policies in this run.
-Read the detailed `acceptance-resume-plan.md` and CURRENT.md in
-`/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/`.
+Full operator evidence and task trail:
+/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/
+Native rejection source was identified in session01a15cac-5793-7365-a705-0127e7f67754.
+Ordinary Card prose matched the existing secret guard because the launcher told
+the worker to inline it into Bash. Keep the guard. Use the existing file-input
+contract with the complete hydrated Card and preserve halt evidence.
+Stage a faithful failing regression before the minimal fix. Fresh QA/Review follow.
 
-Reuse issue #8 / PR10 in QA, and issue #9 / PR11 from its FIRST RESERVED REPAIR.
-Initial #9 failure already ran and one canonical record retains repairs=0,
-phase=idle, pending_lane=build. Do not replay that initial failure, reset counters,
-create replacement fixture issues/PRs or write canonical state from a lane.
-Only the existing wave coordinator owns reservations and diagnosis transitions.
-
-The existing owned issue7QA worktree and partial report are handed off after
-read-only reconciliation. It can fast-forward to this current accepted base with
---ff-only, preserving its known untracked report/receipts. Its nested fixture roots
-MUST stay at the same absolute paths. Reuse the existing fixture configs in the
-external evidence folder. Start each child wave in its exact configured repo.path.
-Never remove the parent issue7QA directory on cleanup: it contains retained nested
-Git repositories/configs. Keep its branch; a fresh Reviewer can use a clean detached
-worktree from the actual remote issue branch head. No force checkout or force push.
-
-Prove the real restricted gate, two real reserved failed repairs, restart/diagnosis,
-stale-head rejection and no Done before merge. Close/archive controlled fixtures
-only after proof is retained. No fixture may merge. Keep report concise and raw logs
-in the external evidence root. No standalone QA project or new runner/framework.
-
-Every required diff read MUST first fetch complete --kind metadata with
-files,labels,body,additions,deletions,changedFiles,headRefOid, then pass --meta to
---kind diff. Never omit it. Ordinary reports have no blocked-by footer. That footer
-is reserved for actual blockers and `-` means a human gate, not no dependencies.
-Use installed helpers by absolute path under the configured project root if an issue
-worktree lacks ignored pack resources. Never commit copied pack/helper files.
-Use pstack:poteto-mode at
-`/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
+Every required diff read first fetches --kind metadata with
+files,labels,body,additions,deletions,changedFiles,headRefOid. Then --kind diff
+MUST pass --meta pointing to that fresh file. Never omit --meta.
+Use installed helpers by absolute root path in worktrees lacking ignored pack.
+Do not inline captured Card/transcript text into Bash during reproduction.
+Ordinary reports have no blocked-by footer. It is only for an actual blocker,
+and a bare dash is a human gate. The body uses - None. under Blocked by.
+Preserve issue7QA and its nested fixture repos at their current absolute paths.
+No force checkout/push and no changes to main.
+Use pstack poteto-mode at
+/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md.
 
 <!-- super-board:begin v3.1.2 (managed; edits inside are overwritten on upgrade) -->
 ## Super Board
