@@ -1,41 +1,46 @@
-# Super Board focused repair instructions
+# Super Board live acceptance restart
 
 Read CLAUDE.md. Never invoke task-observer or its protocol. Never add a co-author trailer.
-The owner authorized finishing this reviewed integration through Project #4 linked
-to maxchangm/super-board, named Super Board. Claude acceptance is deferred at the
-owner's explicit request. All active product work uses Pi.
+The owner authorized finishing the integration through repository-linked Project #4,
+Super Board. Claude live acceptance is explicitly deferred. Use Pi, not Claude.
+All product work remains in Pi lanes. Current phase: finish issue #7 acceptance.
+Use `.claude/super-board/configs/super-board.json`; report merge target is
+`codex/pi-pilot-20261020`. No production deployment or release tag.
 
-Current phase: fix issue #12, absent repair-phase display labels. Use
-`.claude/super-board/configs/super-board.json`. The only permitted merge destination
-for this focused fix is `codex/pi-pilot-20261020`. Do not deploy or create a release tag.
-Pi lane workers own implementation, QA and Review. Use pstack:poteto-mode at
-`/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
-Read issue #12 and all comments. Commit a failing faithful regression before the
-small shared fix. Preserve the canonical record, ownership, counts, failure halts
-and head-bound merge policy. Do not add a runner or an evaluation framework.
-
-The real acceptance run halted and all owned worker processes exited. Issue #9
-has one persisted idle canonical record with repairs=0 and pending_lane=build.
-The failed command partially applied loop:rebuild-0. No mutation was replayed.
-Preserve all halted issue #7/#8/#9 worktrees, claims, branches and draft PRs.
-Do not resume fixtures or reset their state as part of #12. After this fix is
-independently accepted, the coordinator will explicitly resume acceptance #7.
-
-PR #1 is the existing integration delivery. Its overlapping helper paths are an
-intentional stacked correction from this observed defect, not a duplicate fix.
-Proceed with the appropriate preflight conflict note. PR #1 currently closes no
-separate implementation issue. Do not modify or merge PR #1 from this #12 lane.
-
-Required diff-read protocol for every lane and author-note pass:
-First capture complete metadata through `super-board-github-read.py --kind metadata`
-with `pr view N --json files,labels,body,additions,deletions,changedFiles,headRefOid`.
-Then use `--kind diff --meta <that-file>` with `pr diff N`. Never omit --meta.
-A missing --meta paused this actual run. Preserve the halt until explicit validated recovery.
-
-Issue worktrees do not copy ignored installed resources. Invoke installed helpers
-and skills by absolute path under the configured project root when absent in your
-worktree. Never commit copied pack files or helpers. Keep raw evidence in
+Fix #12 is independently accepted as merge51aac56 (PR13). The accepted helper was
+refreshed in the pilot and both preserved fixture roots; hashes match. Code carried
+into source PR1 as2d2c9e5. Do not edit product scripts, skills or policies in this run.
+Read the detailed `acceptance-resume-plan.md` and CURRENT.md in
 `/Users/maxchan/Documents/Codex/2026-10-20/op/outputs/super-board-handoff/implementation-evidence/finish-20261021/`.
+
+Reuse issue #8 / PR10 in QA, and issue #9 / PR11 from its FIRST RESERVED REPAIR.
+Initial #9 failure already ran and one canonical record retains repairs=0,
+phase=idle, pending_lane=build. Do not replay that initial failure, reset counters,
+create replacement fixture issues/PRs or write canonical state from a lane.
+Only the existing wave coordinator owns reservations and diagnosis transitions.
+
+The existing owned issue7QA worktree and partial report are handed off after
+read-only reconciliation. It can fast-forward to this current accepted base with
+--ff-only, preserving its known untracked report/receipts. Its nested fixture roots
+MUST stay at the same absolute paths. Reuse the existing fixture configs in the
+external evidence folder. Start each child wave in its exact configured repo.path.
+Never remove the parent issue7QA directory on cleanup: it contains retained nested
+Git repositories/configs. Keep its branch; a fresh Reviewer can use a clean detached
+worktree from the actual remote issue branch head. No force checkout or force push.
+
+Prove the real restricted gate, two real reserved failed repairs, restart/diagnosis,
+stale-head rejection and no Done before merge. Close/archive controlled fixtures
+only after proof is retained. No fixture may merge. Keep report concise and raw logs
+in the external evidence root. No standalone QA project or new runner/framework.
+
+Every required diff read MUST first fetch complete --kind metadata with
+files,labels,body,additions,deletions,changedFiles,headRefOid, then pass --meta to
+--kind diff. Never omit it. Ordinary reports have no blocked-by footer. That footer
+is reserved for actual blockers and `-` means a human gate, not no dependencies.
+Use installed helpers by absolute path under the configured project root if an issue
+worktree lacks ignored pack resources. Never commit copied pack/helper files.
+Use pstack:poteto-mode at
+`/Users/maxchan/.codex/plugins/cache/pstack/pstack/1.1.0/skills/poteto-mode/SKILL.md`.
 
 <!-- super-board:begin v3.1.2 (managed; edits inside are overwritten on upgrade) -->
 ## Super Board
