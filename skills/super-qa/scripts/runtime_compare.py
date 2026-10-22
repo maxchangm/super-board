@@ -6,6 +6,8 @@ The scenario command prints one JSON object: correct (boolean), duration_ms
 memory_bytes. Commands are argv arrays, never shell snippets. See runtime-verification.md.
 """
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import math
@@ -141,6 +143,53 @@ def ready(url, process, timeout):
 
 def group_members(group):
     """Read actual live members: killpg(..., 0) is unreliable for residual groups."""
+    if sys.platform == 'darwin':
+        # Darwin's setuid ps cannot exec inside the native worker sandbox.
+        class BsdInfo(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_uint32) for name in (
+                'flags', 'status', 'xstatus', 'pid', 'ppid', 'uid', 'gid',
+                'ruid', 'rgid', 'svuid', 'svgid', 'reserved')] + [
+                ('comm', ctypes.c_char * 16), ('name', ctypes.c_char * 32),
+                ('nfiles', ctypes.c_uint32), ('pgid', ctypes.c_uint32),
+                ('pjobc', ctypes.c_uint32), ('tdev', ctypes.c_uint32),
+                ('tpgid', ctypes.c_uint32), ('nice', ctypes.c_int32),
+                ('start_sec', ctypes.c_uint64), ('start_usec', ctypes.c_uint64)]
+
+        libproc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        libproc.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+        libproc.proc_listpids.restype = ctypes.c_int
+        libproc.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+        libproc.proc_pidinfo.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        needed = libproc.proc_listpids(2, group, None, 0)  # PROC_PGRP_ONLY
+        if needed < 0 or ctypes.get_errno() or needed % ctypes.sizeof(ctypes.c_int):
+            raise RuntimeError('could not size owned process group during cleanup')
+        for _ in range(3):
+            pids = (ctypes.c_int * (needed // ctypes.sizeof(ctypes.c_int) + 32))()
+            ctypes.set_errno(0)
+            size = libproc.proc_listpids(2, group, pids, ctypes.sizeof(pids))
+            if size < 0 or ctypes.get_errno() or size % ctypes.sizeof(ctypes.c_int):
+                raise RuntimeError('could not inspect owned process group during cleanup')
+            if size < ctypes.sizeof(pids):
+                break
+            needed = ctypes.sizeof(pids) * 2
+        else:
+            raise RuntimeError('owned process group inspection was truncated')
+        members = {}
+        for pid in pids[:size // ctypes.sizeof(ctypes.c_int)]:
+            if pid <= 0:
+                raise RuntimeError('invalid owned process group member')
+            info = BsdInfo()
+            ctypes.set_errno(0)
+            got = libproc.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))  # PROC_PIDTBSDINFO
+            error = ctypes.get_errno()
+            if got == 0 and error == errno.ESRCH:
+                continue  # A member can exit between enumeration and inspection.
+            if got != ctypes.sizeof(info) or error or info.pid != pid or not 1 <= info.status <= 5:
+                raise RuntimeError('could not inspect owned process identity during cleanup')
+            if info.pgid == group and info.status != 5:  # SZOMB
+                members[pid] = info.uid
+        return members
     result = subprocess.run(['ps', '-axo', 'pid=,pgid=,stat=,uid='],
                             capture_output=True, text=True, timeout=.5)
     if result.returncode:
