@@ -76,7 +76,7 @@ card dropped on purpose is closed as not planned and moved to Done with a 🤷 c
 - Default backend is in-session dynamic workflows: turn them on in `/config`. Headless `claude -p` is opt-in (`worker_backend: "claude-p"`).
 - Set `verify_commands` in the config. Without them the merge gate cannot prove the result builds, and says so.
 - `onboard` fixes what the board needs without asking (skills, scripts, workflows, guards, settings, old folders, config keys) and asks only to install a system tool or sign in. An older super-board is upgraded in place (see [Upgrading from 2.x](../../RELEASE-NOTES.md#upgrading-from-2x)).
-- `onboard` asks once what the robot may do: auto-merge normal changes up to 400 changed lines (money, auth, destructive schema like DROP/TRUNCATE/RENAME, and bigger PRs wait for you; additive migrations run only on the databases you allow, never live), protect main, and which databases it may migrate (default test + staging). Anything only you may run lands in Blocked tagged 🙋 with the exact command; comment `done` and the next wave merges.
+- `onboard` asks once what the robot may do: auto-merge normal changes up to 400 changed lines (money, auth, destructive schema like DROP/TRUNCATE/RENAME, external sharing, and bigger PRs wait for you; additive migrations run only on the databases you allow, never live), protect main, and which databases it may migrate (default test + staging). Anything only you may run lands in Blocked tagged 🙋 with the exact command; comment `done` and the next wave merges.
 - Auto-merge needs the merge-gate and `gh pr merge` lines in your allowlist; `onboard` offers them as a diff.
 - `onboard` can make AGENTS.md the source of truth (CLAUDE.md becomes `@AGENTS.md`) and keeps a managed super-board section in it. Plugin install: the command is `/super-board:super-board onboard`, and its 🔍 Checks step installs the missing scripts, workflows and hooks.
 - Bug sources take any extra source in onboard — a link, app name, API URL, MCP server or command — proven readable (read-only) before it is saved; `/super-collect` runs it like the built-ins.
@@ -219,8 +219,9 @@ to the base branch is opt-in (`onboard` asks once, or `install.sh --protect-main
   PR is …                                      gate        card
   ─────────────────────────────────────────    ────────    ─────────────────────────────
   a normal change, verify green                merge (0)   Done
-  money / auth / destructive schema (labels,   exit 7      Blocked 🙋 — you merge it, or
-    path globs, added-line keywords), or                   comment `done` to approve
+  money / auth / destructive schema /          exit 7      Blocked 🙋 — you merge it, or
+    external sharing (labels, path globs,                   comment `done` to approve
+    added-line keywords), or
     over auto_max_lines (default 400 changed
     lines: "big PR — please review")
   additive migrations, target env allowed      migrate,    Done
@@ -253,7 +254,7 @@ Minimal config at `.claude/super-board/configs/<slug>.json`:
   worker_backend        workflow | claude-p
   columns               Backlog · Ready · Building · QA · Review · Blocked · Done (always all seven)
   human_approves_merge  legacy: true = never auto-merge (prefer merge_policy.default "human")
-  merge_policy          default auto|human · auto_max_lines (400) · size_exclude · always_human {money, auth, schema}
+  merge_policy          default auto|human · auto_max_lines (400) · size_exclude · always_human {money, auth, schema, external-sharing}
   migrations            globs · allowed_envs (test, staging, live) · target_env · commands
   verify_commands       run by the merge gate against the current base before every merge
   rebuild_cap           bounces allowed before a card goes Blocked
