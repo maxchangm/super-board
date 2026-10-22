@@ -286,6 +286,36 @@ class FailureTests(unittest.TestCase):
                 runtime.measure(root/'config.json',root/'evidence')
 
 class ProcessCleanupTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS native process inspection')
+    def test_observes_owned_group_without_executing_ps(self):
+        process = subprocess.Popen([sys.executable, '-c',
+            "import time; print('ready', flush=True); time.sleep(60)"],
+            stdout=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), 'ready')
+            with mock.patch.object(runtime.subprocess, 'run', side_effect=PermissionError('ps exec denied')):
+                self.assertEqual(runtime.group_members(process.pid), {process.pid: os.getuid()})
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=2)
+            process.stdout.close()
+
+    def test_exited_wrapper_does_not_hide_live_descendant(self):
+        process = subprocess.Popen([sys.executable, '-c',
+            "import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'],"
+            "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); print(p.pid,flush=True)"],
+            stdout=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            child_pid = int(process.stdout.readline())
+            process.wait(timeout=2)
+            self.assertEqual(runtime.group_members(process.pid), {child_pid: os.getuid()})
+            runtime.stop(process)
+            self.assertEqual(runtime.group_members(process.pid), {})
+        finally:
+            runtime.stop(process)
+            process.stdout.close()
+
     def test_timeout_kills_stubborn_descendant_holding_output_pipe(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)
@@ -318,11 +348,10 @@ class ProcessCleanupTests(unittest.TestCase):
                 group,child_pid=map(int,pidfile.read_text().split())
                 deadline=time.monotonic()+2
                 while time.monotonic()<deadline:
-                    state=subprocess.run(['ps','-o','stat=','-p',str(child_pid)],capture_output=True,text=True).stdout.strip()
-                    if not state or state.startswith('Z'):
+                    if child_pid not in runtime.group_members(group):
                         break
                     time.sleep(.05)
-                self.assertTrue(not state or state.startswith('Z'),'descendant remains running after timeout')
+                self.assertNotIn(child_pid,runtime.group_members(group),'descendant remains running after timeout')
             finally:
                 if pidfile.exists():
                     group,_=map(int,pidfile.read_text().split())
@@ -364,6 +393,54 @@ class GroupSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'reused'):
                 runtime.stop(p)
             kill.assert_not_called()
+
+    def test_foreign_uid_is_never_signalled(self):
+        p=self.process()
+        with mock.patch.object(runtime,'group_members',return_value={p.pid:os.getuid()+1}), mock.patch.object(runtime.os,'killpg') as kill:
+            with self.assertRaisesRegex(RuntimeError,'foreign'):
+                runtime.stop(p)
+            kill.assert_not_called()
+
+    def test_changed_group_identity_is_not_escalated(self):
+        p=self.process()
+        with mock.patch.object(runtime,'group_members',side_effect=[{p.pid:os.getuid()},{p.pid+1:os.getuid()}]), mock.patch.object(runtime.os,'killpg') as kill:
+            with self.assertRaisesRegex(RuntimeError,'identity changed'):
+                runtime.stop(p)
+            kill.assert_called_once_with(p.pid,signal.SIGTERM)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS native process inspection')
+    def test_native_inspection_errors_never_signal(self):
+        lib = runtime.ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        def result(value, error=0):
+            def call(*args):
+                runtime.ctypes.set_errno(error)
+                return value
+            return call
+        process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
+                                   start_new_session=True)
+        self.addCleanup(process.wait, timeout=2)
+        self.addCleanup(process.terminate)
+        self.assertEqual(runtime.group_members(process.pid), {process.pid: os.getuid()})
+        for boundary, failure in (
+                ('proc_listpids', result(-1, runtime.errno.EPERM)),
+                ('proc_listpids', result(1)),
+                ('proc_listpids', lambda kind, group, buf, size: size if buf is not None else 4),
+                ('proc_pidinfo', result(0, runtime.errno.EPERM)),
+                ('proc_pidinfo', result(135)),
+                ('proc_pidinfo', result(0))):
+            with self.subTest(boundary=boundary, failure=failure):
+                fake = mock.Mock(proc_listpids=lib.proc_listpids, proc_pidinfo=lib.proc_pidinfo)
+                setattr(fake, boundary, mock.Mock(side_effect=failure))
+                p = mock.Mock(pid=process.pid)
+                p.poll.return_value=None
+                with mock.patch.object(runtime.ctypes,'CDLL',return_value=fake), mock.patch.object(runtime.os,'killpg') as kill:
+                    with self.assertRaises(RuntimeError):
+                        runtime.stop(p)
+                    kill.assert_not_called()
+        fake = mock.Mock(proc_listpids=lib.proc_listpids,
+                         proc_pidinfo=mock.Mock(side_effect=result(0, runtime.errno.ESRCH)))
+        with mock.patch.object(runtime.ctypes,'CDLL',return_value=fake):
+            self.assertEqual(runtime.group_members(process.pid), {})
 
 class BrowserAdapterTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('node'), 'Node is required for browser adapter')
