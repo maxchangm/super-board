@@ -154,22 +154,27 @@
     // or keyword (case-insensitive, searched in the diff's ADDED lines only) of
     // a category exits the gate 7: no merge, card → Blocked 🙋 (the human merges
     // it, or comments "done" to approve and the next wave merges).
-    // Setting this key replaces the whole default set; {} turns it off.
+    // Custom categories and matchers extend the mandatory defaults below.
+    // Neither {} nor an empty category removes mandatory approval rules.
     // Globs: `**/` = any dirs (incl. none), `**` = anything, `*` = one segment.
     "always_human": {
       "money":  { "labels": ["money", "payments", "billing", "pricing"],
                   "paths": ["**/billing/**", "**/payments/**", "**/stripe/**", "**/checkout/**"],
                   "keywords": ["stripe.", "payment_intent", "price_id", "invoice.create"] },
-      "auth":   { "labels": ["auth", "security"],
+      "auth":   { "labels": ["auth", "security", "permissions"],
                   "paths": ["**/auth/**", "**/authz/**", "**/permissions/**"],
-                  "keywords": ["jwt.sign", "bcrypt", "password_hash", "service_role"] },
+                  "keywords": ["jwt.sign", "bcrypt", "password_hash", "service_role", "grant permission", "grant all"] },
       // Destructive schema changes ONLY (DROP / TRUNCATE / RENAME, or the
       // `schema` label) need a human. Additive migrations (new table, new
       // column, new index) are not "schema": they follow the `migrations` DB-env
       // rule below. A live database is always human, whatever the change.
       "schema": { "labels": ["schema", "destructive"],
                   "paths": [],
-                  "keywords": ["drop table", "drop column", "truncate table", "rename column", "drop schema"] }
+                  "keywords": ["drop table", "drop column", "truncate table", "rename column", "drop schema"] },
+      "external-sharing": {
+                  "labels": ["external-sharing", "data-sharing", "external-data-sharing"],
+                  "paths": ["**/telemetry/**", "**/data-export/**"],
+                  "keywords": ["sendbeacon(", "navigator.sendbeacon", "captureexception("] }
     },
     // true only when the user explicitly chose auto-merge onto a
     // production-detected base in onboard. run.md's production-merge guard

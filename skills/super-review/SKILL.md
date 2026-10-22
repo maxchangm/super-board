@@ -335,7 +335,7 @@ See `.claude/skills/super-board/references/run.md` → Reviewer. Summary of the 
    - **Over-engineering only** (from `ponytail:ponytail-review`, see super-review step 3) → list it in the report, open no thread, and carry on to the merge decision; it never bounces a card alone. When the card bounces for another finding anyway, open a `[builder]` thread for each Over-engineering finding too, so the rebuild trims it.
    - **Code-side new finding** → new `[builder]`-prefixed thread, move card Review → Ready (`loop:rebuild-N`).
    - **Test-side new finding** → new `[qa]`-prefixed thread, move card Review → QA (`loop:rebuild-N`).
-   - **Blocker finding (destructive schema, contract, money, auth, live-DB migration) or rebuild cap hit** → full §4 Block template, move card Review → Blocked. A *clean* PR that merely touches money, auth or schema is not a finding: run the merge protocol, and the gate's `merge_policy` hands it to a human (exit 7 → 🙋 Blocked).
+   - **Blocker finding (destructive schema, contract, money, auth, live-DB migration) or rebuild cap hit** → full §4 Block template, move card Review → Blocked. A *clean* PR that merely touches money, auth, schema or external sharing is not a finding: run the merge protocol, and the gate's `merge_policy` hands it to a human (exit 7 → 🙋 Blocked).
 8. Write the Reviewer report (marker `<!-- super-review:report -->`, ids on every finding) — edit the existing report comment in place, post a new one only on the first review. It is the next re-review's `prior_report`.
 9. Clean up worktree.
 
@@ -355,7 +355,7 @@ two complete builds. In order, no shortcuts:
    leave the card in **Review** with a `[reviewer]` comment naming both shas.
    The gate owns the merge decision (config `merge_policy`, `migrations`):
    - **Exit 9 — verification-readiness.** Halt the run; preserve card, approval, claims, and worktree. Configure `verify_commands` with the owning project's real checks and restart explicitly. No bounce to Build, rebase retry, approval request, or bare merge.
-   - **Exit 7 — a human merges.** `merge_policy` matched (money / auth / schema label,
+   - **Exit 7 — a human merges.** `merge_policy` matched (money / auth / schema / external-sharing label,
      path or added-line keyword; a diff over `auto_max_lines`, default 400 — "big PR — please
      review"; `default: "human"`). `schema` means destructive only (DROP / TRUNCATE / RENAME);
      an additive migration follows `migrations.allowed_envs`, and a live DB is always human.
@@ -372,7 +372,7 @@ two complete builds. In order, no shortcuts:
      authorize it. For exits 7 and 8, copy `approval-request:` into the canonical
      issue block and link it from the PR (no duplicate request); see block-template.md.
    - The rule in one line: the robot migrates the databases it was allowed to test its
-     work; live databases, money, auth and destructive schema changes wait for a person.
+     work; live databases, money, auth, destructive schema and external sharing changes wait for a person.
 3. **Confirm the merge landed** — never trust the merge command's exit code:
    **Exit 79 — required GitHub evidence unavailable:** stop the current run. Leave
    the card, approval, claims, and worktree intact. Report the local halt reason;

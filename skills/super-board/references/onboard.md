@@ -278,7 +278,7 @@ Write it atomically (temp file + rename) after every answer. A halt never loses 
 
 6. 🛡️ POLICIES — ONE AskUserQuestion call, two questions; details folded
    Q1 header "Rules", "Use the safe defaults?"
-      • Yes (Recommended) — description: "robot merges normal changes · money/logins/DB wait for
+      • Yes (Recommended) — description: "robot merges normal changes · money/logins/DB/external sharing wait for
         you · no pushes to main · migrate test + staging only"
         (production base kept: "you merge everything (main goes live) · no pushes to main ·
         migrate test + staging")
@@ -287,7 +287,7 @@ Write it atomically (temp file + rename) after every answer. A halt never loses 
       • Yes, add <N> lines to settings.json (Recommended)
       • No, ask me each time
    Folded details = ONE dim line under each, never a table:
-      merge_policy.default auto · always_human: money, auth, schema · push guard on (main, master,
+      merge_policy.default auto · always_human: money, auth, schema, external-sharing · push guard on (main, master,
       <base>) · migrations.allowed_envs: test, staging
       + Bash(gh project:*) + Bash(gh issue:*) + Bash(gh pr:*) + … (the --dry-run output, joined)
    Review each → ONE more AskUserQuestion call, up to three questions:
@@ -296,7 +296,8 @@ Write it atomically (temp file + rename) after every answer. A halt never loses 
        sets merge_policy.allow_auto_on_production: true (run.md's guard needs it).
        → merge_policy.default "auto" | "human"; auto_max_lines 400 (lockfiles, generated,
          snapshots, migration SQL not counted); always_human = schema defaults (money, auth,
-         destructive schema). A matching PR parks in Blocked with 🙋.
+         destructive schema, external-sharing). Custom matchers extend these mandatory rules.
+         A matching PR parks in Blocked with 🙋.
     b. "Push guard" — "Block pushing straight to main?" [Yes (Recommended for a repo with
        commits) / No]. Skipped when settings.json already wires guard-protected-push.py. Script
        missing (--no-hooks install) → record the answer and say: "Run ./install.sh --no-hooks
