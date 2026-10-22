@@ -1,19 +1,15 @@
-# Self-host pilot preflight
+# A1 pilot preflight
 
-Scope: issue #16 only, documentation correction on pilot/selfhost-20261022.
+Scope: fresh issue #17 only, text correction in diagrams/onboarding/index.html.
 
-[✓] GitHub repository and project #4 are readable and writable; issue #16 was created and moved to Ready.
-[✓] Project #4 has Backlog, Ready, Building, QA, Review, Blocked, Done and issue #16 is the only admitted pilot issue. Existing PR #1 remains unchanged.
-[✓] Issue #16 has explicit Problem, Context, Fix, checklist Acceptance Criteria, Risk and exact `- None.` dependencies.
-[✓] Existing duplicate/overlap preflight returned proceed, clean, no duplicate and no overlap.
-[✓] Codex CLI 0.163.0 is installed and authenticated with ChatGPT.
-[✓] Live Codex skills/list inventory resolves all required Build, QA and Review helpers.
-[✓] Configured verification command is the repository-owned `bash tests/run-safety.sh`.
-[✓] Codex launcher scripts pass bash syntax checks; host detection returns codex.
-[✓] No database, application server, external service secret or browser is required for this documentation ticket.
-[✓] No existing Super Board dispatcher or lane process was found before launch.
-[✓] Dedicated pilot base and separate runner setup branches were pushed. Main is not a merge target.
+[✓] Original project #4 is linked to maxchangm/super-board and has all seven pipeline columns.
+[✓] Issue #17 has explicit scope, four acceptance checks, risk and exact no-dependency declaration.
+[✓] Issue #17 is in Backlog pending final safety verification. Closed #16 is not acceptance evidence.
+[✓] Codex CLI is authenticated and the native inventory resolves all remaining lane helpers.
+[✓] Runner installation matches repaired source 01ed733 for the lane, wave and GitHub-read helpers.
+[✓] Native lane and grade sandbox probes allow shared runtime writes and deny unrelated checkout source writes.
+[✓] Invalid slurp/formatter usage returns64 locally; the corrected live labels read succeeds.
+[✓] Both normal and inherited-strict read suites pass all23 tests. Independent source review is clear.
+[✓] No application server, database, secret or production deployment is needed for this documentation ticket.
 
-The runner stays detached at its setup commit with installed source from c03e388. Worker branches start from the dedicated pilot base, not the runner setup commit. The live host catalog and installed helper copies stay local.
-
-Run status: stopped after Build halt. Revalidate GitHub reads and shared halt-marker access before any restart. These launch checks describe the original preflight, not current execution readiness.
+Pending before launch: full63-suite strict-environment result, pilot base fast-forward, live duplicate/overlap check, claim verification and exclusive wave lock.
