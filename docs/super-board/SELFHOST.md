@@ -1,5 +1,7 @@
 # Super Board self-host pilot
 
+Evaluation closed on 2026-10-22: **A1 FAILED**. The owner chose to finish the evaluation with that result. Further repairs and restarts are stopped. See [the final evidence](runs/2026-10-22-a1-pilot.md). The setup below is historical, not a restart instruction.
+
 Runner source: 01ed7335e1e6aa2b064ce5d728c710ff67a2f0e0 (startup repair PR #18).
 Board: https://github.com/users/maxchangm/projects/4.
 Target repository: maxchangm/super-board.
