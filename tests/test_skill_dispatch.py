@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real setup/launcher boundaries with fake external tools. No host or GitHub writes."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +13,9 @@ import time
 import unittest
 
 KIT = Path(os.environ.get('SB_TEST_PACK', Path(__file__).resolve().parents[1]))
+spec = importlib.util.spec_from_file_location('runtime_compare', KIT / 'skills/super-qa/scripts/runtime_compare.py')
+runtime = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runtime)
 NAMES = ['super-board','super-build','super-qa','super-review','super-collect','visual','git-sync','ui-refine-loop',
          'tdd','implement','codebase-design','code-review','diagnosing-bugs','verification-before-completion','testing-strategy']
 
@@ -158,44 +162,51 @@ dispatch_lane build 1
 
     def test_legacy_halt_stops_owned_worker_preserves_unrelated_and_evidence(self):
         self.full('claude')
+        runner = None
+        def exited(pid):
+            if runner is None:
+                raise RuntimeError('owned fixture session was not started')
+            members = runtime.group_members(runner.pid)
+            if runner.poll() is not None and runner.pid in members:
+                raise RuntimeError('owned fixture session identity was reused')
+            try:
+                session = os.getsid(pid)
+                group = os.getpgid(pid)
+            except ProcessLookupError:
+                return True
+            if session != runner.pid:
+                if pid in members:
+                    raise RuntimeError('owned fixture worker session changed')
+                return True  # The PID now belongs to an unrelated session.
+            if group != runner.pid:
+                raise RuntimeError('owned fixture worker left its process group')
+            if pid not in members:
+                return True  # Only exited/zombie members are omitted from this group.
+            if members[pid] != os.getuid():
+                raise RuntimeError('owned fixture worker identity changed')
+            return False
         def reap_owned():
             path = self.root / 'owned.pid'
             if not path.exists():
                 return
             pid = int(path.read_text())
-            def exited():
-                try:
-                    # Reap directly if this platform adopted the worker.
-                    child, _ = os.waitpid(pid, os.WNOHANG)
-                    return child == pid
-                except ChildProcessError:
-                    # The runner's worker is normally a grandchild. An orphaned
-                    # zombie has exited and cannot write, even before init reaps it.
-                    state = subprocess.run(['ps', '-p', str(pid), '-o', 'stat=', '-o', 'command='],
-                                           capture_output=True, text=True, timeout=1).stdout.strip()
-                    if not state:
-                        return True
-                    status, _, command = state.partition(' ')
-                    # This unique fixture path identifies the owned worker.
-                    # A reused PID belongs to somebody else and is never signalled.
-                    return status.startswith('Z') or str(self.bin / 'claude') not in command
             def wait_for_exit():
                 deadline = time.monotonic() + 2
                 while time.monotonic() < deadline:
-                    if exited():
+                    if exited(pid):
                         return True
                     time.sleep(.02)
-                return exited()
-            if exited():
+                return exited(pid)
+            if exited(pid):
                 return
             # The dispatcher may already have sent TERM. Do not re-enter its
             # asynchronous handler; wait for completion before deleting files.
-            if not (self.root / 'owned.stopped').exists() and not exited():
+            if not (self.root / 'owned.stopped').exists() and not exited(pid):
                 try:
                     os.kill(pid, signal.SIGTERM)
                 except ProcessLookupError:
                     return
-            if not wait_for_exit() and not exited():
+            if not wait_for_exit() and not exited(pid):
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -206,9 +217,7 @@ dispatch_lane build 1
             if (self.root / 'owned.pid').exists():
                 self.assertTrue((self.root / 'owned.finished').exists(),
                                 'fixture directory cleanup raced the owned worker shutdown')
-                status = subprocess.run(['ps', '-p', (self.root / 'owned.pid').read_text(), '-o', 'stat='],
-                                        capture_output=True, text=True, timeout=1).stdout.strip()
-                self.assertTrue(not status or status.startswith('Z'),
+                self.assertTrue(exited(int((self.root / 'owned.pid').read_text())),
                                 'directory cleanup began while the fixture worker was still running')
         self.addCleanup(require_worker_finished_before_directory_cleanup)
         self.addCleanup(reap_owned)
@@ -263,9 +272,17 @@ elif args[:2]==['issue','view']:
 elif args[:2]==['issue','edit'] and '--add-assignee' in args:pass
 else:sys.exit('unexpected gh call: '+str(args))
 """)
-        result = subprocess.run(['bash',str(KIT/'scripts/super-board-run.sh'),'fixture'],cwd=self.root,
-                                env=self.env,text=True,capture_output=True,timeout=15)
-        self.assertEqual(result.returncode,10,result.stderr + result.stdout)
+        runner = subprocess.Popen(['bash',str(KIT/'scripts/super-board-run.sh'),'fixture'],cwd=self.root,
+                                  env=self.env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                  start_new_session=True)
+        try:
+            stdout, stderr = runner.communicate(timeout=15)
+        finally:
+            if runner.poll() is None:
+                runtime.stop(runner)
+            runner.stdout.close()
+            runner.stderr.close()
+        self.assertEqual(runner.returncode,10,stderr + stdout)
         deadline = __import__('time').monotonic()+3
         while not (self.root/'owned.stopped').exists() and __import__('time').monotonic()<deadline:
             __import__('time').sleep(.02)
