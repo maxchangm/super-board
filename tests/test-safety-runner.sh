@@ -17,4 +17,11 @@ out=$(bash "$WORK/tests/run-safety.sh" 2>&1) || rc=$?
 [[ "$out" == *reached* && "$out" == *'python reached'* ]] || fail 'failure hid later suites'
 rm "$WORK/tests/test-a-failure.sh"
 bash "$WORK/tests/run-safety.sh" >/dev/null || fail 'passing suites failed'
-echo 'PASS: test-safety-runner.sh (empty, failure, continuation, success)'
+cat > "$WORK/tests/test-isolation.sh" <<'SH'
+[ -z "${SUPER_BOARD_SKILLS_CATALOG+x}" ] || { echo 'inherited live skill catalog' >&2; exit 1; }
+[ -z "${SB_REPO_PATH+x}" ] || { echo 'inherited repository path' >&2; exit 1; }
+[ "${SB_GITHUB_READ_STRICT:-}" = 1 ] || { echo 'strict read mode changed' >&2; exit 1; }
+SH
+out=$(SUPER_BOARD_SKILLS_CATALOG="$WORK/live-catalog.json" SB_REPO_PATH="$PACK" SB_GITHUB_READ_STRICT=1 \
+  bash "$WORK/tests/run-safety.sh" 2>&1) || fail "$out"
+echo 'PASS: test-safety-runner.sh (empty, failure, continuation, success, isolation)'
