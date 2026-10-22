@@ -26,3 +26,5 @@ The startup repair rejects unsupported native gh formatting before network/marke
 The runner installation is copied from pinned source 01ed733; installed launcher/read-helper bytes were compared with that source. Local skill inventory was refreshed through native Codex skills/list and all required helpers resolve. Source and setup commits remain separate. The pilot base will advance by fast-forward to the tested repair source before any worker starts.
 
 A1 passes only after real Build, QA and Review lane sessions deliver the accepted issue-17 correction, the normal merge gate merges it into pilot/selfhost-20261022, and project #4 marks it Done. Record startup repairs separately from any rescues after the new launch. No claim of reliability or superiority over upstream follows from one documentation task.
+
+Startup repair PR #18 merged into main as 9c704e5. Its merged tree equals tested source 01ed733. All63 safety suites passed under SB_GITHUB_READ_STRICT=1. The pilot base advanced by fast-forward to 01ed733, and the original project remains #4.
