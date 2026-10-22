@@ -3,6 +3,7 @@
 # Run every suite even after a failure, then fail the whole gate if any suite failed.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+unset SUPER_BOARD_SKILLS_CATALOG
 
 for tool in bash python3 git jq node curl tar; do
   command -v "$tool" >/dev/null || { echo "Missing test dependency: $tool" >&2; exit 1; }
