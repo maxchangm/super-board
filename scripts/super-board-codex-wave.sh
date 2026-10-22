@@ -55,6 +55,7 @@ try:
         raise ValueError('max_workers must be a non-negative integer')
     workers = workers or max(1, min(16, (os.cpu_count() or 2) - 2))
     root = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+    common_dir = Path(subprocess.check_output(['git', 'rev-parse', '--git-common-dir'], text=True).strip()).resolve()
     configured = (config.get('codex') or {}).get('model')
     pinned = codex[0].startswith('--codex=') or (isinstance(configured, str) and configured.strip())
 except (OSError, ValueError, subprocess.CalledProcessError) as error:
@@ -127,8 +128,8 @@ try:
 except FileExistsError:
     parser.error('Codex wave PID marker exists; reconcile the previous wave before starting another')
 
-# The router only grades scope; it writes nothing. A Codex-only run grades with
-# the cheapest Codex model rather than waking Claude.
+# Guarded reads may persist a shared halt even though grading changes no product files.
+# A Codex-only run grades with the cheapest Codex model rather than waking Claude.
 ROUTER_MODEL = 'gpt-6-luna'
 GRADE_SCHEMA = {'type': 'object', 'additionalProperties': False, 'required': ['complexity'],
                 'properties': {'complexity': {'type': 'string', 'enum': ['low', 'medium', 'high']}}}
@@ -147,9 +148,12 @@ def grade(card):
     with tempfile.TemporaryDirectory(prefix='super-board-codex-grade-') as temporary:
         schema_path, output = Path(temporary) / 'schema.json', Path(temporary) / 'grade.json'
         schema_path.write_text(json.dumps(GRADE_SCHEMA))
+        filesystem = {':root': 'read', ':slash_tmp': 'write', ':tmpdir': 'write',
+                      str(common_dir.parent / '.claude/super-board'): 'write'}
+        grants = '{' + ', '.join(json.dumps(key) + '=' + json.dumps(value) for key, value in filesystem.items()) + '}'
         command = ['codex', 'exec', '-m', ROUTER_MODEL, '-C', str(root), '-c', 'approval_policy="never"',
                    '-c', 'default_permissions="super-board-grade"',
-                   '-c', 'permissions.super-board-grade.filesystem={":root"="read", ":slash_tmp"="write", ":tmpdir"="write"}',
+                   '-c', 'permissions.super-board-grade.filesystem=' + grants,
                    '-c', 'permissions.super-board-grade.network.enabled=true',
                    '--output-schema', str(schema_path), '--output-last-message', str(output), '-']
         with mutex:

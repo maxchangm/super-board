@@ -189,7 +189,8 @@ with tempfile.TemporaryDirectory(prefix='super-board-codex-') as temporary:
     # .git as read-only. Explicit git/common-dir grants also cover submodules.
     # https://learn.chatgpt.com/docs/permissions → File access limited to workspace
     filesystem = {':root': 'read', ':slash_tmp': 'write', ':tmpdir': 'write',
-                  str(root): 'write', str(git_dir): 'write', str(common_dir): 'write'}
+                  str(root): 'write', str(git_dir): 'write', str(common_dir): 'write',
+                  str(common_dir.parent / '.claude/super-board'): 'write'}
     grants = '{' + ', '.join(json.dumps(key) + '=' + json.dumps(value) for key, value in filesystem.items()) + '}'
     command = ['codex', 'exec', '-C', str(root), '-c', 'approval_policy="never"',
                '-c', 'default_permissions="super-board-lane"',
