@@ -77,6 +77,23 @@ sed '/| PostHog replay |/d' "$WORK/good.md" > "$WORK/short-evidence.md"
 sed 's|<details><summary>12 rows · no Sentry event · 1 user</summary>||; s|</details>||' "$WORK/good.md" > "$WORK/open-evidence.md"
 sed 's|  - b. Upload `fixtures/ten-rows.csv`|  - b. Upload → Submit|' "$WORK/good.md" > "$WORK/arrows.md"
 
+# Exceed pipe buffers in Context, Evidence and Acceptance Criteria, and in prose.
+awk '
+  BEGIN { print "## Blocked by\n- #42\n" }
+  /^## (Evidence|Risk)$/ || /^<\/details>$/ {
+    for (i = 0; i < 8192; i++) print "Additional reproduction detail."
+  }
+  { print }
+' "$WORK/good.md" > "$WORK/large.md"
+awk '
+  /^## Context$/ { print; print "  - d. Upload → Submit"; next }
+  /^## Evidence$/ { print "  - e. Upload → Submit" }
+  { print }
+' "$WORK/large.md" > "$WORK/large-arrows.md"
+{ printf 'TODO: fill in the first result\n'; cat "$WORK/large.md"; printf '\nTODO: fill in the final result\n'; } > "$WORK/large-tbd.md"
+{ printf '<one sentence: first result>\n'; cat "$WORK/large.md"; printf '\n<one sentence: final result>\n'; } > "$WORK/large-placeholder.md"
+sed '/| Expected \/ actual |/d' "$WORK/large.md" > "$WORK/large-missing-row.md"
+
 # ── gh stub.
 #   DEDUPE_HIT    — issue number the fingerprint search returns ("" = none)
 #   PROJECTS      — titles `project list` reports
@@ -151,6 +168,22 @@ is "rejects arrows in steps"        66 "$(code --title T --body-file "$WORK/arro
 is "rejects an Evidence row missing" 66 "$(code --title T --body-file "$WORK/short-evidence.md")"
 has "names the missing row"         "$(cat "$WORK/err")" "posthog replay"
 is "rejects an unfolded Evidence table" 66 "$(code --title T --body-file "$WORK/open-evidence.md")"
+
+echo "── large bodies"
+RC=$(code --title T --body-file "$WORK/large.md" --check-body)
+is "accepts large valid sections" 0 "$RC"
+[ "$RC" -eq 0 ] || cat "$WORK/err" >&2
+is "check-body makes no GitHub calls" "" "$(cat "$GH_LOG")"
+for pair in "arrows:Context steps go one per line" "tbd:TBD/TODO:" "placeholder:<placeholder>" "missing-row:expected / actual"; do
+  name=${pair%%:*}; diagnostic=${pair#*:}
+  is "rejects large $name body" 66 "$(code --title T --body-file "$WORK/large-$name.md" --check-body)"
+  has "large $name names the invalid content" "$(cat "$WORK/err")" "$diagnostic"
+done
+OUT=$(run --title T --body-file "$WORK/large.md"); RC=$?
+is "files a large valid body" "77" "$OUT"
+[ "$RC" -eq 0 ] || cat "$WORK/err" >&2
+is "preserves one existing Blocked by section" 1 "$(grep -c '^## Blocked by$' "$BODY_CAPTURE")"
+has "preserves the existing blocker" "$(cat "$BODY_CAPTURE")" "- #42"
 
 echo "── happy path"
 OUT=$(run "${BASE[@]}" --kind bug --priority high --category functional \

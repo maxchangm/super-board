@@ -99,27 +99,27 @@ section() {
 if [ "${SUPER_QA_ALLOW_WEAK_BODY:-0}" != "1" ]; then
   MISSING=""
   for s in "Problem" "Context" "Evidence" "Fix" "Acceptance Criteria" "Risk"; do
-    echo "$BODY_RAW" | grep -qiE "^#{1,3}[[:space:]]+${s}[[:space:]]*$" || MISSING="${MISSING}${MISSING:+, }${s}"
+    echo "$BODY_RAW" | grep -iE "^#{1,3}[[:space:]]+${s}[[:space:]]*$" >/dev/null || MISSING="${MISSING}${MISSING:+, }${s}"
   done
   [ -z "$MISSING" ] || die "body is missing required section(s): ${MISSING} (writing-standard.md § 3)" 66
 
-  section "Acceptance Criteria" | grep -qE '^[[:space:]]*- \[[ xX]\] ' \
+  section "Acceptance Criteria" | grep -E '^[[:space:]]*- \[[ xX]\] ' >/dev/null \
     || die "Acceptance Criteria needs a checklist: one '- [ ] <checkable outcome>' per line" 66
   CONTEXT=$(section "Context")
-  echo "$CONTEXT" | grep -qiE 'where:' \
+  echo "$CONTEXT" | grep -iE 'where:' >/dev/null \
     || die "Context needs a '- **Where:** <page>, \`<route>\`' line" 66
-  echo "$CONTEXT" | grep -qE '^[[:space:]]+- [a-z]\. ' \
+  echo "$CONTEXT" | grep -E '^[[:space:]]+- [a-z]\. ' >/dev/null \
     || die "Context needs lettered steps under Where, one per line ('  - a. Sign in')" 66
-  echo "$CONTEXT" | grep -qE '→' \
+  echo "$CONTEXT" | grep -E '→' >/dev/null \
     && die "Context steps go one per line, never chained with arrows" 66
 
   # The Evidence table: all 12 rows, an empty one says "n/a — why".
   EV=$(section "Evidence" | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:space:]]*\|[[:space:]]*/|/g')
-  echo "$EV" | grep -q '<details>' || die "Evidence must be a folded table (<details><summary>…</summary> + table)" 66
+  echo "$EV" | grep '<details>' >/dev/null || die "Evidence must be a folded table (<details><summary>…</summary> + table)" 66
   MISSROWS=""
   OLDIFS=$IFS; IFS='|'
   for row in $EVIDENCE_ROWS; do
-    echo "$EV" | grep -qF "|${row}|" || MISSROWS="${MISSROWS}${MISSROWS:+, }${row}"
+    echo "$EV" | grep -F "|${row}|" >/dev/null || MISSROWS="${MISSROWS}${MISSROWS:+, }${row}"
   done
   IFS=$OLDIFS
   [ -z "$MISSROWS" ] || die "Evidence table is missing row(s): ${MISSROWS} — write 'n/a — <why>' for one you could not capture" 66
@@ -128,10 +128,10 @@ if [ "${SUPER_QA_ALLOW_WEAK_BODY:-0}" != "1" ]; then
   # angle brackets; an unfilled `<one sentence: what is wrong>` does not).
   PROSE=$(echo "$BODY_RAW" | awk '/^```/{f=!f; next} !f' | sed 's/`[^`]*`//g')
   LEFTOVER=""
-  echo "$PROSE" | grep -qE '(^|[^[:alnum:]])(TBD|TODO:)' && LEFTOVER="TBD/TODO:"
+  echo "$PROSE" | grep -E '(^|[^[:alnum:]])(TBD|TODO:)' >/dev/null && LEFTOVER="TBD/TODO:"
   # Template placeholders read like prose in angle brackets; real inline HTML is
   # a short known tag. Anything else with a space or a colon inside is a leftover.
-  echo "$PROSE" | grep -qE '<[a-zA-Z][^>]*[[:space:]:][^>]*>' && LEFTOVER="${LEFTOVER}${LEFTOVER:+ and }<placeholder>"
+  echo "$PROSE" | grep -E '<[a-zA-Z][^>]*[[:space:]:][^>]*>' >/dev/null && LEFTOVER="${LEFTOVER}${LEFTOVER:+ and }<placeholder>"
   [ -z "$LEFTOVER" ] || die "body still contains unfilled placeholders (${LEFTOVER}) — fill them or set SUPER_QA_ALLOW_WEAK_BODY=1" 66
 fi
 [ "$CHECK_ONLY" -eq 0 ] || exit 0
@@ -208,7 +208,7 @@ trap 'rm -f "$BODY_TMP"' EXIT
   #
   # `- None.` is the honest default here: a QA finding is reproducible against
   # code that already exists, which is what makes it actionable now.
-  if ! echo "$BODY_RAW" | grep -qiE '^#{1,3}[[:space:]]+Blocked by[[:space:]]*$'; then
+  if ! echo "$BODY_RAW" | grep -iE '^#{1,3}[[:space:]]+Blocked by[[:space:]]*$' >/dev/null; then
     echo
     echo "## Blocked by"
     echo

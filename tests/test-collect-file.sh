@@ -139,7 +139,11 @@ is "custom fp must start custom|" 64 "$(run --type bug --source custom --title T
 is "fp prefix needs a key"  64 "$(run --type bug --source sentry --title T --body-file "$WORK/bug.md" --fingerprint "err|sentry|" >/dev/null; echo $?)"
 for pair in "sentry err|sentry|9" "posthog posthog|exception|abc123" "posthog gap|checkout" "github github|55" "prs prs|merge-gate|drift" "architecture arch|order-intake|shallow" "custom custom|linear|ENG-42"; do
   src=${pair%% *}; fp=${pair#* }
-  OUT=$(run --type bug --source "$src" --title T --body-file "$WORK/bug.md" --fingerprint "$fp")
+  OUT=$(run --type bug --source "$src" --title T --body-file "$WORK/bug.md" --fingerprint "$fp"); RC=$?
+  if [ "$RC" -ne 0 ]; then
+    printf 'fingerprint %s positive call failed with exit %s\n' "$fp" "$RC" >&2
+    cat "$WORK/err" >&2
+  fi
   has "fingerprint shape accepted for $src" "$OUT" "would-file|bug|T|Backlog"
 done
 is "fingerprint required"   64 "$(run --type bug --source sentry --title T --body-file "$WORK/bug.md" >/dev/null; echo $?)"
