@@ -51,3 +51,5 @@ evals/results/
 /.claude/super-board/onboard-answers.json
 /.claude/super-board/upgrade.json
 /skills-lock.json
+/.claude/settings.json.bak-*
+/.claude/super-board/inflight-plan.json
