@@ -38,3 +38,16 @@ docs/super-board/runs/**/*.trace.zip
 
 # claude plugin eval output
 evals/results/
+
+# Installed self-host runner and machine-local evidence
+/.agents/
+/.codex/
+/.claude/bin/
+/.claude/hooks/
+/.claude/skills/
+/.claude/workflows/
+/.claude/super-board/backup/
+/.claude/super-board/*skills.json
+/.claude/super-board/onboard-answers.json
+/.claude/super-board/upgrade.json
+/skills-lock.json

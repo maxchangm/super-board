@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "description": "One-ticket self-host pilot using runner source c03e388",
+  "project": {
+    "owner": "maxchangm",
+    "title": "Super Board Self-host Pilot",
+    "number": 5
+  },
+  "worker_backend": "workflow",
+  "host": "codex",
+  "codex": {
+    "model": "gpt-6-astra"
+  },
+  "model_tier": "medium",
+  "target": {
+    "type": "repo",
+    "url": null
+  },
+  "repo": {
+    "path": ".",
+    "remote": "https://github.com/maxchangm/super-board"
+  },
+  "base_branch": "pilot/selfhost-20261022",
+  "timezone": "Asia/Hong_Kong",
+  "columns": [
+    "Backlog",
+    "Ready",
+    "Building",
+    "QA",
+    "Review",
+    "Blocked",
+    "Done"
+  ],
+  "labels": [
+    "qa",
+    "bug",
+    "feature"
+  ],
+  "paths": {
+    "project_md": "docs/super-board/SELFHOST.md",
+    "pre_flight_md": "docs/super-board/pre-flight.md",
+    "runs_dir": "docs/super-board/runs"
+  },
+  "human_approves_merge": false,
+  "merge_policy": {
+    "default": "auto",
+    "auto_max_lines": 100,
+    "allow_auto_on_production": false
+  },
+  "migrations": {
+    "allowed_envs": [],
+    "target_env": "staging",
+    "commands": {},
+    "checks": {},
+    "human_steps": []
+  },
+  "verify_commands": [
+    "bash tests/run-safety.sh"
+  ],
+  "max_workers": 1,
+  "rebuild_cap": 2,
+  "no_progress_cycles": 3,
+  "truth_gate": "non-trivial",
+  "truth_threshold": 70,
+  "collect": {
+    "sources": [
+      "github"
+    ]
+  },
+  "notifications": {
+    "channel": "session",
+    "bot_identity": "maxchangm"
+  }
+}
