@@ -286,6 +286,21 @@ class FailureTests(unittest.TestCase):
                 runtime.measure(root/'config.json',root/'evidence')
 
 class ProcessCleanupTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS native process inspection')
+    def test_observes_owned_group_without_executing_ps(self):
+        process = subprocess.Popen([sys.executable, '-c',
+            "import time; print('ready', flush=True); time.sleep(60)"],
+            stdout=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), 'ready')
+            with mock.patch.object(runtime.subprocess, 'run', side_effect=PermissionError('ps exec denied')):
+                self.assertEqual(runtime.group_members(process.pid), {process.pid: os.getuid()})
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=2)
+            process.stdout.close()
+
     def test_timeout_kills_stubborn_descendant_holding_output_pipe(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)
