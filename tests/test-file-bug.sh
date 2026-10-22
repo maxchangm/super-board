@@ -85,9 +85,13 @@ awk '
   }
   { print }
 ' "$WORK/good.md" > "$WORK/large.md"
-awk '/^## Evidence$/ { print "  - d. Upload → Submit" } { print }' "$WORK/large.md" > "$WORK/large-arrows.md"
-{ cat "$WORK/large.md"; printf '\nTODO: fill in the final result\n'; } > "$WORK/large-tbd.md"
-{ cat "$WORK/large.md"; printf '\n<one sentence: final result>\n'; } > "$WORK/large-placeholder.md"
+awk '
+  /^## Context$/ { print; print "  - d. Upload → Submit"; next }
+  /^## Evidence$/ { print "  - e. Upload → Submit" }
+  { print }
+' "$WORK/large.md" > "$WORK/large-arrows.md"
+{ printf 'TODO: fill in the first result\n'; cat "$WORK/large.md"; printf '\nTODO: fill in the final result\n'; } > "$WORK/large-tbd.md"
+{ printf '<one sentence: first result>\n'; cat "$WORK/large.md"; printf '\n<one sentence: final result>\n'; } > "$WORK/large-placeholder.md"
 sed '/| Expected \/ actual |/d' "$WORK/large.md" > "$WORK/large-missing-row.md"
 
 # ── gh stub.
