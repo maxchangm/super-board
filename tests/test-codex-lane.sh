@@ -121,23 +121,50 @@ rm -f "$T/stderr"
 mkdir -p "$T/super/.git/modules"
 git init -q --separate-git-dir="$T/super/.git/modules/kit" "$T/submodule"
 python3 "$KIT/tests/fixtures/install_worker_skills.py" "$T/submodule"
-cd "$T/submodule"
-lane review --codex >"$T/out"
-python3 - "$SB_CODEX_TEST_LOG" "$T/submodule" "$T/super/.git/modules/kit" <<'PY'
-import json, pathlib, sys
-call = json.loads(pathlib.Path(sys.argv[1]).read_text().splitlines()[-1])
-args = call['args']
-configs = [args[i+1] for i, arg in enumerate(args) if arg == '-c']
-assert 'approval_policy="never"' in configs
-assert 'default_permissions="super-board-lane"' in configs
-assert not any('.extends=' in entry for entry in configs)
-assert 'permissions.super-board-lane.network.enabled=true' in configs
-grants = next(entry.split('=', 1)[1] for entry in configs if entry.startswith('permissions.super-board-lane.filesystem='))
-filesystem = json.loads(grants.replace('=', ':'))
-for path in sys.argv[2:]:
-    assert filesystem[str(pathlib.Path(path).resolve())] == 'write'
-assert filesystem[':root'] == 'read'
-assert '--dangerously-bypass-approvals-and-sandbox' not in args
+git -C "$T/repo" -c user.name=test -c user.email=test@test commit --allow-empty -qm fixture
+git -C "$T/repo" worktree add -q --detach "$T/linked"
+python3 "$KIT/tests/fixtures/install_worker_skills.py" "$T/linked"
+for CHECKOUT in "$T/repo" "$T/linked" "$T/submodule"; do
+  cd "$CHECKOUT"
+  lane review --codex >"$T/out"
+done
+python3 - "$SB_CODEX_TEST_LOG" "$KIT" <<'PY'
+import importlib.util, json, os, pathlib, subprocess, sys
+spec = importlib.util.spec_from_file_location('github_read', pathlib.Path(sys.argv[2]) / 'scripts/super-board-github-read.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+calls = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+failures = []
+for call in calls:
+    args = call['args']
+    root = pathlib.Path(args[args.index('-C') + 1]).resolve()
+    os.chdir(root)
+    runtime = reader.halt_path().parent.resolve()
+    git_dir, common_dir = [pathlib.Path(subprocess.check_output(['git', 'rev-parse', flag], text=True).strip()).resolve()
+                           for flag in ('--git-dir', '--git-common-dir')]
+    profile = 'super-board-grade' if call['lane'] == 'grade' else 'super-board-lane'
+    configs = [args[i+1] for i, arg in enumerate(args) if arg == '-c']
+    assert 'approval_policy="never"' in configs
+    assert f'default_permissions="{profile}"' in configs
+    assert not any('.extends=' in entry for entry in configs)
+    assert f'permissions.{profile}.network.enabled=true' in configs
+    grants = next(entry.split('=', 1)[1] for entry in configs if entry.startswith(f'permissions.{profile}.filesystem='))
+    filesystem = json.loads(grants.replace('=', ':'))
+    assert filesystem[':root'] == 'read'
+    assert filesystem[':slash_tmp'] == filesystem[':tmpdir'] == 'write'
+    assert '--dangerously-bypass-approvals-and-sandbox' not in args
+    writes = {pathlib.Path(path) for path, mode in filesystem.items() if mode == 'write' and not path.startswith(':')}
+    allowed = {runtime} if profile == 'super-board-grade' else {root, git_dir, common_dir, runtime}
+    assert writes <= allowed, (profile, root, writes - allowed)
+    if profile == 'super-board-lane':
+        assert {root, git_dir, common_dir} <= writes
+    # Check explicit grants. Temp aliases cover all fixture checkouts, so native enforcement is checked by the pilot owner.
+    writable = lambda path: any(path == grant or grant in path.parents for grant in writes)
+    if not writable(runtime / 'a1-write-probe'):
+        failures.append(f'{profile} {root.name}: shared halt/cache directory is not writable')
+    if profile == 'super-board-grade' or common_dir.parent != root:
+        assert not writable(common_dir.parent / 'unrelated-main-source.py'), (profile, root, writes)
+assert not failures, '\n'.join(failures)
 PY
 cd "$T/repo"
 SB_CODEX_TEST_INVALID=1 RC=0

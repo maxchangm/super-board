@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Offline CLI contract: bounded required reads, validated evidence, local stop."""
+import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / 'scripts/super-board-github-read.py'
@@ -30,7 +32,7 @@ print(r.get('err', ''), file=sys.stderr)
 sys.exit(r.get('rc', 0))
 ''')
         gh.chmod(0o755)
-        self.env = dict(os.environ, PATH=f'{self.root}:{os.environ["PATH"]}',
+        self.env = dict(os.environ, SB_GITHUB_READ_STRICT='', PATH=f'{self.root}:{os.environ["PATH"]}',
                         READ_CALLS=str(self.log), SB_GITHUB_HALT_FILE=str(self.halt),
                         SB_GITHUB_RETRY_DELAY='0')
 
@@ -65,6 +67,78 @@ sys.exit(r.get('rc', 0))
                       command=['api', 'graphql', '-f', 'query=query { wrong }'])
         self.assertEqual(r.returncode, 79)
         self.assertEqual(self.log.read_text(), '1')
+
+    def test_slurp_formatter_usage_error_never_calls_github_or_halts(self):
+        flags = [
+            ['--slurp', '--jq', 'map(map(.name))'],
+            ['--slurp=true', '--jq=.'], ['--slurp=1', '-q.'],
+            ['--slurp', '-q', '.'], ['--slurp', '-q=.'], ['--slurp', '-iq.'],
+            ['--slurp', '--template', '{{.}}'], ['--slurp', '--template={{.}}'],
+            ['--slurp', '-t', '{{.}}'], ['--slurp', '-t={{.}}'],
+            ['--slurp', '-t{{.}}'], ['--slurp', '-it{{.}}'],
+            ['--slurp=false', '--slurp', '--jq', '.'],
+        ]
+        for strict in ('', '1'):
+            self.env['SB_GITHUB_READ_STRICT'] = strict
+            for options in flags:
+                with self.subTest(strict=strict, flags=options):
+                    self.log.unlink(missing_ok=True)
+                    self.halt.unlink(missing_ok=True)
+                    r = self.read([{'rc': 1, 'err': 'the `--slurp` option is not supported with `--jq` or `--template`'}],
+                                  command=['api', 'repos/x/y/labels', '--paginate', *options])
+                    self.assertFalse(self.log.exists(), 'caller usage errors must not invoke gh')
+                    self.assertFalse(self.halt.exists(), 'caller usage errors must not halt other lanes')
+                    self.assertEqual((r.returncode, r.stdout), (64, ''), r.stderr)
+                    self.assertIn('--slurp', r.stderr)
+                    self.assertIn('--jq', r.stderr)
+                    self.assertIn('--template', r.stderr)
+                    self.assertIn('pipe', r.stderr)
+                    self.assertNotIn('retry', r.stderr)
+
+    def test_slurp_formatter_preflight_has_no_subprocess_or_marker_access(self):
+        spec = importlib.util.spec_from_file_location('github_read', HELPER)
+        reader = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reader)
+        for recovering in (False, True):
+            with self.subTest(recovering=recovering), \
+                    patch.object(reader.subprocess, 'run', side_effect=AssertionError('subprocess started')), \
+                    patch.object(reader, 'halt_path', side_effect=AssertionError('halt marker accessed')), \
+                    patch.object(reader.time, 'sleep', side_effect=AssertionError('retry started')):
+                with self.assertRaisesRegex(ValueError, '--slurp'):
+                    reader.read(['api', 'repos/x/y/labels', '--paginate', '--slurp', '-q', '.'],
+                                recovering=recovering)
+
+    def test_supported_slurp_and_formatter_options_still_read(self):
+        for options in [
+                ['--slurp'], ['--slurp=true'], ['--slurp=1'],
+                ['--jq', '.'], ['-q.'], ['--template', '{{.}}'],
+                ['--slurp=false', '--jq', '.'],
+                ['--slurp', '--slurp=false', '-t{{.}}'],
+                ['--slurp', '--jq', ''], ['--slurp', '--template='],
+                ['--slurp', '--jq=.', '--jq='],
+                ['--template', '--slurp'],
+                ['--slurp', '--header', '--jq'],
+                ['--slurp', '-H', '--template'],
+                ['--', '--slurp', '--jq'],
+        ]:
+            with self.subTest(flags=options):
+                self.log.unlink(missing_ok=True)
+                r = self.read([{'out': '[]'}], command=['api', 'repos/x/y/labels', '--paginate', *options])
+                self.assertEqual((r.returncode, r.stdout), (0, '[]'), r.stderr)
+                self.assertEqual(self.log.read_text(), '1')
+                self.assertFalse(self.halt.exists())
+
+    def test_authentication_failure_still_halts_in_both_modes(self):
+        for strict in ('', '1'):
+            with self.subTest(strict=strict):
+                self.env['SB_GITHUB_READ_STRICT'] = strict
+                self.log.unlink(missing_ok=True)
+                self.halt.unlink(missing_ok=True)
+                r = self.read([{'rc': 1, 'err': 'HTTP 401 Bad credentials'}])
+                self.assertEqual(r.returncode, 79, r.stderr)
+                self.assertEqual(self.log.read_text(), '1')
+                self.assertEqual(json.loads(self.halt.read_text())['attempts'], 1)
+                self.assertEqual(r.stdout, '')
 
     def test_successful_exit_with_malformed_or_partial_payload_halts(self):
         for out, kind in [('{"resources":{"graphql":null,"core":null}}', 'quota'), ('[{}]', 'prs-open'), ('{"items":[{"id":"I","content":{}}],"totalCount":1}', 'items'), ('{"items":[]}', 'items'),

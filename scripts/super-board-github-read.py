@@ -295,6 +295,27 @@ def validate(text, kind, meta=None):
 def read(args, kind='json', meta=None, recovering=False):
     if not read_only(args):
         raise ValueError('retry helper accepts read-only GitHub commands only')
+    if args[0] == 'api':
+        slurp, formatters = False, {}
+        options = iter(args[1:])
+        for arg in options:
+            if arg == '--':
+                break
+            option, equals, value = arg.partition('=')
+            short = re.fullmatch(r'-i*([FHXfpqt])(.*)', arg)
+            if short:
+                option, equals, value = '-' + short[1], bool(short[2]), short[2]
+                value = value[1:] if value.startswith('=') else value
+            if option == '--slurp':
+                slurp = not equals or value in ('1', 't', 'T', 'true', 'TRUE', 'True')
+            elif option in ('--jq', '-q', '--template', '-t'):
+                formatters['jq' if option in ('--jq', '-q') else 'template'] = value if equals else next(options, '')
+            elif not equals and option in ('--cache', '--field', '--header', '--hostname', '--input',
+                                            '--method', '--preview', '--raw-field', '-F', '-H', '-X', '-p', '-f'):
+                next(options, None)
+        if slurp and any(formatters.values()):
+            raise ValueError('gh api does not support --slurp with --jq/-q or --template/-t; '
+                             'remove the formatter and pipe the helper JSON output to jq instead')
     if not recovering:
         check_halt()
     operation = {'args': args, 'kind': kind, 'meta': meta}
