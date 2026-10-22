@@ -3,8 +3,8 @@
   "description": "One-ticket self-host pilot using runner source c03e388",
   "project": {
     "owner": "maxchangm",
-    "title": "Super Board Self-host Pilot",
-    "number": 5
+    "title": "Super Board",
+    "number": 4
   },
   "worker_backend": "workflow",
   "host": "codex",
