@@ -155,7 +155,7 @@ h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
 <div class="screen" data-id="policies" data-n="Policies" data-e="🛡️" data-w="c" data-why="what the robot may do alone."><div class="msg"><span>⏺</span><span class="ansr">User answered Claude's questions:
   ⎿  · Use the safe defaults? → <b>Yes</b>
      <span class="faint">robot merges normal changes · money/logins/DB wait for you · no pushes to main · migrate test + staging only</span>
-  ⎿  · Let it run its commands without asking each time? → <b>Yes, add 7 lines to settings.json</b></span></div><div class="tres dim">merge_policy.default auto · always_human: money, auth, schema · push guard on (main, master, staging) · migrations.allowed_envs: test, staging
+  ⎿  · Let it run its commands without asking each time? → <b>Yes, add 7 lines to settings.json</b></span></div><div class="tres dim">merge_policy.default auto · always_human: money, auth, schema, external-sharing · push guard on (main, master, staging) · migrations.allowed_envs: test, staging
 <span class="ok">+ Bash(gh project:*) + Bash(gh issue:*) + Bash(gh pr:*) + Bash(gh pr merge:*) + Bash(bash .claude/bin/super-board-merge-gate.sh:*) + Bash(bash .claude/bin/super-board-env-check.sh:*) + Bash(pnpm test:*)</span></div><div class="tres faint">⎿  saved to .claude/super-board/onboard-answers.json</div></div>
 
 <div class="screen" data-id="sources" data-n="Bug sources" data-e="📥" data-w="c" data-why="where to find problems to fix."><div class="msg"><span>⏺</span><span class="ansr">User answered Claude's questions:
