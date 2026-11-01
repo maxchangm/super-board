@@ -66,6 +66,20 @@ sys.exit(r.get('rc', 0))
         self.assertEqual(r.returncode, 79)
         self.assertEqual(self.log.read_text(), '1')
 
+    def test_caller_jq_that_drops_required_fields_is_a_usage_error_not_a_halt(self):
+        r = self.read([{'out': '[{"number":1,"title":"t"}]'}], kind='prs-open',
+                      command=['api', 'repos/o/r/pulls', '--jq', '[.[] | {number,title}]'])
+        self.assertEqual(r.returncode, 64, r.stderr)
+        self.assertFalse(self.halt.exists())
+        self.assertIn('--jq', r.stderr)
+
+    def test_slurp_with_jq_is_a_usage_error_before_any_call(self):
+        r = self.read([{'out': '[]'}], kind='comments',
+                      command=['api', 'repos/o/r/issues/1/comments', '--paginate', '--slurp', '--jq', '.'])
+        self.assertEqual(r.returncode, 64, r.stderr)
+        self.assertFalse(self.log.exists(), 'gh must not run')
+        self.assertFalse(self.halt.exists())
+
     def test_successful_exit_with_malformed_or_partial_payload_halts(self):
         for out, kind in [('{"resources":{"graphql":null,"core":null}}', 'quota'), ('[{}]', 'prs-open'), ('{"items":[{"id":"I","content":{}}],"totalCount":1}', 'items'), ('{"items":[]}', 'items'),
                           ('{"items":[],"totalCount":1}', 'items'),

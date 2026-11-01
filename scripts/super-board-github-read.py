@@ -295,6 +295,10 @@ def validate(text, kind, meta=None):
 def read(args, kind='json', meta=None, recovering=False):
     if not read_only(args):
         raise ValueError('retry helper accepts read-only GitHub commands only')
+    # gh refuses this pair locally on every attempt; retrying it would halt the run for the caller's typo.
+    if '--slurp' in args and any(a in ('--jq', '-q', '--template', '-t') or a.startswith(('--jq=', '--template=')) for a in args):
+        raise ValueError('gh api does not allow --slurp with --jq or --template; drop the filter and filter the slurped output yourself')
+    caller_filter = any(a in ('--jq', '-q') or a.startswith('--jq=') for a in args)
     if not recovering:
         check_halt()
     operation = {'args': args, 'kind': kind, 'meta': meta}
@@ -341,6 +345,9 @@ def read(args, kind='json', meta=None, recovering=False):
             time.sleep(max(0, delay) * attempt)
     if shape_only and kind in FORMS and not os.environ.get('SB_GITHUB_READ_STRICT'):
         raise ValueError(f'{last}; this call failed, the run continues. Valid form: --kind {kind} -- {FORMS[kind]}')
+    # A caller's own --jq that strips required fields fails the same way every time: a usage error, not an outage.
+    if shape_only and caller_filter and not os.environ.get('SB_GITHUB_READ_STRICT'):
+        raise ValueError(f'{last}; your --jq dropped fields --kind {kind} requires. This call failed, the run continues: drop --jq and filter the output yourself')
     halt(f'{last}; stopped after 3 failed attempts', 3, operation)
 
 
