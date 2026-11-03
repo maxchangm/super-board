@@ -2,7 +2,8 @@
 # Tests hooks/cleanup-wt.py on a throwaway repo with a bare origin.
 # Pins: merged work goes (fast-forward, squash, merged into a non-default base),
 # unmerged work and the current worktree stay, dirty state is wip-committed, a stray
-# worktree loses its folder but keeps its branch, and the recovery TSV restores.
+# worktree loses its folder but keeps its branch on a manual --apply only, --post-merge
+# touches only the merged branch, and the recovery TSV restores.
 set -euo pipefail
 cd "$(dirname "$0")"
 CW="$(pwd)/../hooks/cleanup-wt.py"
@@ -93,17 +94,17 @@ OUT=$(cd "$R" && CLEANUP_WT_GH=/nonexistent python3 "$CW" --no-fetch --remote-on
 printf '%s\n' "$OUT" | grep -q 'gh unavailable' || fail "should note gh unavailable"
 printf '%s\n' "$OUT" | grep -qE '^WOULD' && fail "nothing remote may be planned without gh"
 
-# 5 -- --post-merge is silent unless it acts, local only, and never wip-commits.
+# 5 -- --post-merge acts only on --branch, is silent unless it acts, local only, and never wip-commits.
 g worktree add -q "$R/.claude/worktrees/wt-pm" feat-ff
 for d in "$R"/.git/worktrees/wt-pm; do touch -t 202001010000 "$d/gitdir" "$d/commondir"; done
 echo wip > "$R/.claude/worktrees/wt-pm/x.txt"
-OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk </dev/null)
+OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk --branch feat-ff </dev/null)
 [ -d "$R/.claude/worktrees/wt-pm" ] || fail "--post-merge must keep a dirty worktree"
-[ ! -d "$R/.claude/worktrees/wt-cur" ] || fail "wt-cur is merged and no longer current: it should go"
-OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk </dev/null)
+[ -d "$R/.claude/worktrees/wt-cur" ] || fail "wt-cur is not the merged task: --post-merge --branch feat-ff must keep it"
+OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk --branch feat-ff </dev/null)
 [ -z "$OUT" ] || fail "--post-merge with nothing to do should be silent, got: $OUT"
 rm "$R/.claude/worktrees/wt-pm/x.txt"
-OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk </dev/null)
+OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk --branch feat-ff </dev/null)
 printf '%s' "$OUT" | grep -q 'removed worktree' || fail "--post-merge should report what it removed, got: $OUT"
 gone feat-ff
 
@@ -116,5 +117,33 @@ commit moved.txt 1; g push -q origin trunk
 OUT=$(cd "$R" && echo '{"hook_event_name":"SessionStart"}' | python3 "$CW" --auto)
 gone feat-auto
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null || fail "--auto under a hook should emit hook JSON, got: $OUT"
+
+# 7 -- #479: post-merge cleanup touches only the merged task. An unrelated clean checkout outside
+# .claude/worktrees/ keeps its folder, HEAD, branch, tracked and ignored files, in every hook mode.
+g switch -q -c task;       commit task.txt 1;     g switch -q trunk
+g merge -q --squash task >/dev/null 2>&1; GIT_COMMITTER_DATE=$OLD g commit -qm "squash task"; g push -q origin trunk
+g switch -q -c research/x; commit research.txt 1; g switch -q trunk
+g worktree add -q "$R/.claude/worktrees/task" task
+g worktree add -q "$T/research" research/x
+mkdir -p "$R/.git/info"; echo ign.txt >> "$R/.git/info/exclude"; echo keep > "$T/research/ign.txt"
+for d in "$R"/.git/worktrees/task "$R"/.git/worktrees/research; do touch -t 202001010000 "$d/gitdir" "$d/commondir"; done
+RHEAD=$(git -C "$T/research" rev-parse HEAD)
+research_intact() {
+  [ -d "$T/research" ] || fail "$1: the unrelated research checkout was deleted"$'\n'"$OUT"
+  [ "$(git -C "$T/research" rev-parse HEAD)" = "$RHEAD" ] || fail "$1: research HEAD moved"
+  [ "$(git -C "$T/research" branch --show-current)" = research/x ] || fail "$1: research branch changed"
+  [ -f "$T/research/research.txt" ] && [ -f "$T/research/ign.txt" ] || fail "$1: research files lost"
+  kept research/x
+}
+OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk </dev/null)
+research_intact "--post-merge without --branch"
+[ -d "$R/.claude/worktrees/task" ] || fail "--post-merge without --branch must act on nothing"
+OUT=$(cd "$R" && python3 "$CW" --post-merge --base trunk --branch task </dev/null)
+research_intact "--post-merge --branch task"
+[ ! -d "$R/.claude/worktrees/task" ] || fail "the merged task worktree should be removed"$'\n'"$OUT"
+gone task
+commit moved2.txt 1; g push -q origin trunk
+OUT=$(cd "$R" && python3 "$CW" --auto </dev/null)
+research_intact "--auto after a base move"
 
 echo "PASS: test-cleanup-wt.sh"
