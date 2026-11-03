@@ -222,7 +222,7 @@ RC=0; STUB_OID="$SHA" STUB_STATE_FAIL=1 STUB_MERGE_RC=1 gate --expect-head "$SHA
 teardown
 
 # 12 — post-merge cleanup: when the cleanup-wt hook is installed the gate runs it with
-#      --post-merge --base <base> after a merge, and its failure never fails the
+#      --post-merge --base <base> --branch <PR head branch> after a merge, and its failure never fails the
 #      merge that already happened.
 head_setup
 mkdir -p "$TMP/.claude/hooks"
@@ -230,8 +230,8 @@ printf 'import sys\nopen("%s/cleanup.args","w").write(" ".join(sys.argv[1:]))\ns
   > "$TMP/.claude/hooks/cleanup-wt.py"
 RC=0; STUB_OID="$SHA" gate --expect-head "$SHA" >/dev/null 2>&1 || RC=$?
 [ "$RC" -eq 0 ] || fail "a failing cleanup must not fail the merge, got $RC"
-grep -q -- "--post-merge --base staging" "$TMP/cleanup.args" 2>/dev/null \
-  || fail "cleanup-wt should run with --post-merge --base staging, got: $(cat "$TMP/cleanup.args" 2>/dev/null)"
+grep -qE -- "--post-merge --base staging --branch [^ ]+" "$TMP/cleanup.args" 2>/dev/null \
+  || fail "cleanup-wt should run with --post-merge --base staging --branch <PR head branch> (#479), got: $(cat "$TMP/cleanup.args" 2>/dev/null)"
 teardown
 
 # 13 — a refused merge never cleans up. (Scenario 9 is the no-cleanup-wt path.)

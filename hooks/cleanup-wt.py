@@ -14,9 +14,14 @@ Usage (from the repo root or any of its worktrees):
     --local-only      skip remote branches       --remote-only   skip worktrees and local branches
     --no-fetch        use refs as they are       --tsv <file>    where the recovery TSV goes
     --post-merge      merge-gate mode: --apply --local-only, never wip-commit, never force,
-                      silent unless it acted
-    --auto            SessionStart mode: --post-merge, but only when a base tip moved
-                      since the last --auto run (the first run only records the tips)
+                      silent unless it acted. Acts only on --branch and its worktree.
+    --branch <name>   with --post-merge: the merged PR's branch. Without it, --post-merge
+                      acts on nothing.
+    --auto            SessionStart mode: --post-merge rules on every branch, but only when a
+                      base tip moved since the last --auto run (the first run only records the tips)
+
+Hook modes (--post-merge, --auto) never remove a worktree outside .claude/worktrees/: it is
+not a task worktree, so it may be someone's research or a checkout another tool owns (#479).
 
 Bases, when no --base is given: the remote default branch (origin/HEAD), else
 init.defaultBranch, else main/master -- plus staging, develop and dev when they exist.
@@ -252,13 +257,15 @@ def classify_local(f, protected, force=False, auto=False):
     dirty = bool(wt and wt["dirty"])
     if dirty and auto:
         return keep("uncommitted changes (hook mode never wip-commits)")
+    if wt and wt["stray"] and auto:
+        return keep("outside .claude/worktrees/ -- not a task worktree")
     if f.get("merged"):
         if dirty:  # the wip commit is new work, so the branch stops being merged: keep it
             return {"bucket": REMOVE, "reason": "merged: %s; dirty -> wip-commit, keep branch" % f["merged"],
                     "remove_worktree": bool(wt), "wip": True, "delete_branch": False}
         return {"bucket": REMOVE, "reason": "merged: " + f["merged"], "remove_worktree": bool(wt),
                 "wip": False, "delete_branch": bool(f["branch"])}
-    if wt and (wt["stray"] or force):
+    if wt and (wt["stray"] or force) and not auto:
         why = "outside .claude/worktrees/" if wt["stray"] else "unmerged, --force"
         save = dirty or not f["branch"]  # a detached HEAD gets a branch so its commits stay reachable
         return {"bucket": REMOVE, "reason": "%s -- remove folder, keep branch%s" % (why, " (wip-commit first)" if dirty else ""),
@@ -310,6 +317,8 @@ def plan(ctx, args):
             if not w["branch"]:
                 ts = int(git_out(ctx["cwd"], "log", "-1", "--format=%ct", w["head"]) or 0)
                 entries.append((None, w["head"], ts, w))
+        if args["post_merge"]:
+            entries = [e for e in entries if args["branch"] and e[0] == args["branch"]]
         for name, sha, ts, w in entries:
             open_pr = (prs or {}).get("open", {}).get(name) if name else None
             skip = (name in protected) or (open_pr is not None and not args["force"])
@@ -419,7 +428,7 @@ def print_table(rows, dry):
 
 def parse_args(argv):
     a = {"apply": False, "force": False, "auto": False, "post_merge": False, "fetch": None,
-         "local": True, "remote": True, "tsv": None, "bases": [], "help": False}
+         "local": True, "remote": True, "tsv": None, "bases": [], "help": False, "branch": None}
     it = iter(argv)
     for arg in it:
         if arg == "--apply":
@@ -442,6 +451,8 @@ def parse_args(argv):
             a["tsv"] = next(it)
         elif arg == "--base":
             a["bases"].append(next(it))
+        elif arg == "--branch":
+            a["branch"] = next(it)
         elif arg in ("-h", "--help"):
             a["help"] = True
         else:

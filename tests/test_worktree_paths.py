@@ -187,7 +187,7 @@ new AsyncFunction('args','agent','pipeline','log',src)(
                     for name in ("gitdir", "commondir"):
                         os.utime(meta / name, (1577836800, 1577836800))
                 self.run_cmd("python3", str(PACK / "hooks/cleanup-wt.py"), "--post-merge",
-                             "--no-fetch", "--base", "main", input="")
+                             "--no-fetch", "--base", "main", "--branch", "issue-7-" + lane, input="")
                 self.assertFalse((self.root / path).exists(), "cleanup must see the lane's worktree")
 
 
