@@ -292,6 +292,26 @@ def validate(text, kind, meta=None):
     return value
 
 
+def fill_files(args, text, recovering):
+    """`gh pr view --json files` stops at 100 files. Page the rest from REST so changedFiles can still match.
+
+    REST lists at most 3000 files; a PR past that keeps failing the changedFiles check.
+    """
+    try:
+        pr = json.loads(text)
+        short = pr['changedFiles'] > len(pr['files'])
+    except (ValueError, KeyError, TypeError):
+        return text  # validate() reports the malformed payload
+    number = next((a for a in args[2:] if re.fullmatch(r'[0-9]+', a)), None)
+    if not short or number is None:
+        return text
+    repo = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ('-R', '--repo')), None)
+    repo = repo or next((a[7:] for a in args if a.startswith('--repo=')), '{owner}/{repo}')
+    _, pages = read(['api', '--paginate', '--slurp', f'repos/{repo}/pulls/{number}/files?per_page=100'], 'array', recovering=recovering)
+    pr['files'] = [{'path': f['filename'], 'additions': f['additions'], 'deletions': f['deletions']} for page in pages for f in page]
+    return json.dumps(pr)
+
+
 def read(args, kind='json', meta=None, recovering=False):
     if not read_only(args):
         raise ValueError('retry helper accepts read-only GitHub commands only')
@@ -330,6 +350,8 @@ def read(args, kind='json', meta=None, recovering=False):
                 last = 'GitHub required read failed' + (f' ({status[0]})' if status else '')
             else:
                 try:
+                    if kind == 'metadata':
+                        result.stdout = fill_files(args, result.stdout, recovering)
                     value = validate(result.stdout, kind, meta)
                     if not recovering:
                         check_halt()
