@@ -170,6 +170,27 @@ dispatch_lane build 7
         self.assertEqual(result.returncode, 79)
         self.assertEqual(self.log.read_text(), '3')
 
+    def test_metadata_past_100_files_is_paged_from_rest(self):
+        # gh pr view --json files stops at 100; REST supplies the rest.
+        def pr(n):
+            return json.dumps({'files': [{'path': f'f{i}', 'additions': 1, 'deletions': 0} for i in range(n)],
+                               'labels': [], 'body': '', 'additions': 175, 'deletions': 0, 'changedFiles': 175})
+        rest = json.dumps([[{'filename': f'f{i}', 'additions': 1, 'deletions': 0, 'status': 'added'} for i in range(100)],
+                           [{'filename': f'f{i}', 'additions': 1, 'deletions': 0, 'status': 'added'} for i in range(100, 175)]])
+        command = ['pr', 'view', '560', '--json', 'files,labels,body,additions,deletions,changedFiles']
+        r = self.read([{'out': pr(100)}, {'out': rest}], 'metadata', command)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        files = json.loads(r.stdout)['files']
+        self.assertEqual([f['path'] for f in files], [f'f{i}' for i in range(175)])
+        self.assertEqual(self.log.read_text(), '2')
+        self.log.unlink()
+        short = json.dumps([[{'filename': f'f{i}', 'additions': 1, 'deletions': 0} for i in range(100)]])
+        r = self.read([{'out': pr(100)}, {'out': short}] * 3, 'metadata', command)
+        self.assertEqual(r.returncode, 64, r.stderr)
+        self.assertEqual(r.stdout, '')
+        self.assertIn('PR file list truncated', r.stderr)
+        self.assertEqual(self.log.read_text(), '6')
+
     def test_truncated_diff_is_not_complete_evidence(self):
         metadata = self.root / 'meta.json'
         metadata.write_text(json.dumps({'files':[{'path':'x.sql'}], 'additions':2,'deletions':0}))
