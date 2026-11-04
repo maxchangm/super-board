@@ -25,7 +25,7 @@ printf '%s\n' "$*" >> "$GH_LOG"
 case "$*" in
   "api -X PATCH repos/{owner}/{repo}/pulls/"*" --input -") jq -j .body > "$BODY" ;;
   "api repos/{owner}/{repo}/pulls/"*)
-    jq -n --arg h "$HEAD_OID" --rawfile b "$BODY" '{head: {sha: $h}, body: $b}' | jq '{headRefOid: .head.sha, body: (.body // "")}' ;;
+    jq -n --arg h "$HEAD_OID" --arg r "${HEAD_REF:-}" --rawfile b "$BODY" '{head: {sha: $h, ref: $r}, body: $b}' | jq '{headRefOid: .head.sha, headRefName: .head.ref, body: (.body // "")}' ;;
   *) echo "unexpected gh call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -108,6 +108,19 @@ ROW=$(grep -n 'runs/issue-7-qa-v1/' "$BODY" | cut -d: -f1); END=$(grep -n '^</de
 is  "blank line kept before </details>" "" "$(sed -n "$((END - 1))p" "$BODY")"
 is  "folded re-append is a no-op" "unchanged" "$(run --pr 7 --block history --expect-head 3f9c2a1 --append-file "$WORK/row.md")"
 cp "$WORK/unfolded.md" "$BODY"
+
+echo "── the body keeps a closing reference (approval links the issue by it)"
+cp "$BODY" "$WORK/pre-closes.md"
+printf '<!-- sb:status -->\n> In QA · Closes #7\n<!-- /sb:status -->\n' > "$BODY"
+printf 'Merged into dev\n' > "$WORK/merged.md"
+run --pr 7 --block status --expect-head 3f9c2a1 --body-file "$WORK/merged.md" >/dev/null
+has "a rewrite that drops Closes keeps the old issue" "$(cat "$BODY")" "Closes #7"
+printf '<!-- sb:status -->\nx\n<!-- /sb:status -->\n' > "$BODY"
+HEAD_REF=issue-598-batch-row-retry run --pr 7 --block status --expect-head 3f9c2a1 --body-file "$WORK/merged.md" >/dev/null
+has "a body with no link takes the issue from the branch" "$(cat "$BODY")" "Closes #598"
+HEAD_REF=issue-598-batch-row-retry run --pr 7 --block status --expect-head 3f9c2a1 --body-file "$WORK/risk.md" >/dev/null
+is  "one Closes line, not two" "1" "$(grep -c 'Closes #598' "$BODY")"
+cp "$WORK/pre-closes.md" "$BODY"
 
 echo "── refuses when the head moved"
 cp "$BODY" "$WORK/before.md"
