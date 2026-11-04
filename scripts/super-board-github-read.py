@@ -387,11 +387,11 @@ def read(args, kind='json', meta=None, recovering=False):
         if attempt < 3:
             print(f'[github-read] {last}; retry {attempt + 1}/3', file=sys.stderr)
             time.sleep(max(0, delay) * attempt)
-    if shape_only and kind in FORMS and not os.environ.get('SB_GITHUB_READ_STRICT'):
-        raise ValueError(f'{last}; this call failed, the run continues. Valid form: --kind {kind} -- {FORMS[kind]}')
     # A caller's own --jq that strips required fields fails the same way every time: a usage error, not an outage.
     if shape_only and caller_filter and not os.environ.get('SB_GITHUB_READ_STRICT'):
         raise ValueError(f'{last}; your --jq dropped fields --kind {kind} requires. This call failed, the run continues: drop --jq and filter the output yourself')
+    if shape_only and kind in FORMS and not os.environ.get('SB_GITHUB_READ_STRICT'):
+        raise ValueError(f'{last}; this call failed, the run continues. Valid form: --kind {kind} -- {FORMS[kind]}')
     halt(f'{last}; stopped after 3 failed attempts', 3, operation)
 
 
