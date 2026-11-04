@@ -358,6 +358,28 @@ def fill_files(args, text, recovering):
     return json.dumps(pr)
 
 
+def stale_metadata(args):
+    """True when GitHub's PR still shows an older head than this checkout's branch on origin.
+
+    A lane that pushes and then reads `pr view --json files` gets the file list of the previous
+    head for a few seconds (2026-11-04, PR #727: 28 files against a 47-file diff). Skipped when the
+    checkout has no pushed current branch, so reads outside a lane never make the extra call.
+    """
+    number = next((a for a in args[2:] if re.fullmatch(r'[0-9]+', a)), None)
+    git = lambda *cmd: subprocess.run(['git', *cmd], capture_output=True, text=True, timeout=60)
+    branch = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.strip()
+    tip = git('ls-remote', 'origin', f'refs/heads/{branch}').stdout.split()[:1] if branch not in ('', 'HEAD') else []
+    if number is None or not tip:
+        return False
+    repo = [x for i, a in enumerate(args[:-1]) if a in ('-R', '--repo') for x in args[i:i + 2]]
+    view = subprocess.run(['gh', 'pr', 'view', number, *repo, '--json', 'headRefName,headRefOid'], capture_output=True, text=True, timeout=30)
+    try:
+        pr = json.loads(view.stdout)
+    except ValueError:
+        return False
+    return pr.get('headRefName') == branch and pr.get('headRefOid') != tip[0]
+
+
 def read(args, kind='json', meta=None, recovering=False):
     if kind != 'diff' and not read_only(args):
         raise ValueError('retry helper accepts read-only GitHub commands only')
@@ -403,6 +425,7 @@ def read(args, kind='json', meta=None, recovering=False):
                 try:
                     if kind == 'metadata':
                         result.stdout = fill_files(args, result.stdout, recovering)
+                        require(not stale_metadata(args), 'PR metadata older than the pushed branch head')
                     value = validate(result.stdout, kind, meta)
                     if not recovering:
                         check_halt()
