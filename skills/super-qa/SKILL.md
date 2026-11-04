@@ -653,6 +653,28 @@ When invoked by super-board (env `SUPER_BOARD_RUN=1` or invocation contains "sup
 - **`qa` card (skipped Building):** move it Ready → QA yourself, create `issue-<N>-<slug>` from the base branch, test what is already there (run.md → "qa cards").
 - **A live URL with no repo** is not a board card: `/super-qa <url>` runs standalone.
 
+### Rounds, scope and found problems
+[lane-rules.md §§ 3–4](../super-board/references/lane-rules.md). Round 1 (no earlier `[qa] [report]` on the PR): report **every problem you can prove**, each with `file:line` and evidence, not the first one.
+A later round verifies only the previous round's findings and new breakage in lines changed since the previous round's head
+(`git diff <prev-head>..HEAD`); an old problem you missed is not a reason to send the card back now. Scope is the issue's
+Acceptance Criteria plus the plan's scope statement (its "In scope / Out of scope" section, when the plan has one). A proven problem
+outside it is filed with `bash .claude/bin/super-review-file-refactor.sh --config <cfg> --found-by qa --from-issue <N> ...`, listed in the
+report as `filed #<new>`, and does not fail the card. The 3-try limit (`rebuild_cap`) stays.
+
+### Close-held evidence pass
+A card in QA whose PR is **merged** and whose issue carries `<!-- super-board:close-held merge=<oid8> -->` for that merge was held by the
+close proof ([lane-rules.md § 1](../super-board/references/lane-rules.md)). This pass writes no code, opens no PR and does not rebuild:
+1. Skip the worktree. Test the merged behaviour at `target.url`, once per acceptance criterion with a visual surface, desktop 1920×1080,
+   with the criterion's result in view. Do not crop, blur or edit a screenshot.
+2. Publish each PNG so it outlives the branch: follow `close_proof.evidence_route` from the config when set, else commit the PNGs to
+   a `runs/issue-<N>-evidence-<oid8>` branch and link `raw/<SHA>/...` URLs.
+3. Post ONE comment on the issue that names the merge commit (first 8 hex digits), embeds the images, carries an `### Acceptance criteria`
+   table with a PASS or FAIL row per box, and ends with `<!-- super-board:close-evidence merge=<oid8> -->`. A fix with no visible
+   surface says `No visual surface: <reason>` instead of images.
+4. Run `python3 .claude/bin/super-board-close-proof.py close --config <cfg> --issue <N> --pr <P> --merge <sha> --head <reviewed head>`.
+   Exit 0 closes the card. Exit 3 again means the proof is still missing: do not loop, stop with the card in QA and say what is missing.
+   One evidence pass per merge: when the close-evidence marker for that merge is already on the issue, do not run another.
+
 ### Lifecycle (Tester, first pass)
 See `.claude/skills/super-board/references/run.md` → Tester (first pass — repo-backed). Summary:
 1. Pull latest of base; checkout `issue-<N>-<slug>` into worktree (a `qa` card: create it from the base).

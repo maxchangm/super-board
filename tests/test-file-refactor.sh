@@ -202,5 +202,28 @@ is "uncertain comment outcome halts" 79 "$RC"
 is "comment is attempted once" 1 "$(grep -c '^issue comment' "$GH_LOG")"
 is "failed comment does not report success ID" "" "$OUT"
 
+echo "── a problem found outside the card's scope (lane-rules.md § 4)"
+rm -f "$SB_GITHUB_HALT_FILE"
+cat > "$WORK/intake.json" <<'JSON'
+{"version":1,"project":{"owner":"acme","title":"Board","number":7},"intake_column":"Intake",
+ "repo":{"path":".","remote":"https://github.com/acme/app.git"}}
+JSON
+is "found-by needs a lane"        64 "$( DEDUPE_HIT="" "$SCRIPT" --config "$WORK/config.json" --title T --fingerprint f --body-file "$WORK/body.md" --found-by chef --from-issue 9 >/dev/null 2>&1; echo $? )"
+is "found-by needs from-issue"    64 "$( DEDUPE_HIT="" "$SCRIPT" --config "$WORK/config.json" --title T --fingerprint f --body-file "$WORK/body.md" --found-by qa >/dev/null 2>&1; echo $? )"
+OUT=$(DEDUPE_HIT="" STATUS_OPTS="Intake Backlog Ready Done" run --config "$WORK/intake.json" --title "Export drops the last row" \
+  --body-file "$WORK/body.md" --fingerprint "export|last-row" --found-by qa --from-issue 9)
+is  "returns the new issue number"        "412" "$OUT"
+has "labels bug and found-by"             "$(cat "$GH_LOG")" "--label bug --label found-by:qa"
+case "$(cat "$GH_LOG")" in *"--label refactor"*) bad "no refactor label" "none" "refactor label" ;; *) ok "no refactor label" ;; esac
+has "bug title"                           "$(cat "$GH_LOG")" "🐛 [fix] export: Export drops the last row"
+has "lands in the configured intake"      "$(cat "$GH_LOG")" "opt_Intake"
+has "links the origin in the body"        "$(cat "$BODY_LOG")" "**Found while working:** #9"
+has "comments the new number on origin"   "$(cat "$GH_LOG")" "issue comment 9"
+OUT=$(DEDUPE_HIT="" run --config "$WORK/config.json" --title "Found elsewhere" --body-file "$WORK/body.md" --fingerprint "export|elsewhere" --found-by review --from-issue 9)
+has "intake defaults to Backlog"          "$(cat "$GH_LOG")" "opt_Backlog"
+cat "$WORK/body.md" > "$WORK/body-ac.md"; printf '\n## Acceptance Criteria\n- [ ] works\n' >> "$WORK/body-ac.md"
+OUT=$(DEDUPE_HIT="" run --config "$WORK/config.json" --title "With criteria" --body-file "$WORK/body-ac.md" --fingerprint "export|ac" --found-by review --from-issue 9)
+case "$(cat "$GH_LOG")" in *"opt_Ready"*) bad "a found problem never lands in Ready" "Backlog" "Ready" ;; *) ok "a found problem never lands in Ready" ;; esac
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

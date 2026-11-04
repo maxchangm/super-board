@@ -158,6 +158,7 @@ Run automatically once installed. Python stdlib, JSON in, JSON out.
 | [README sync](scripts/super-board-readme-sync.py) | Regenerates the skill table; pre-commit and PostToolUse hooks keep it fresh |
 | [cleanup-wt](hooks/cleanup-wt.py) | Removes merged worktrees and branches after each merge and at session start, with a recovery file |
 | [merge gate](scripts/super-board-merge-gate.sh) | Merges only after the current base plus your non-empty project `verify_commands` pass (missing checks halt setup), pinned to the reviewed commit; applies `merge_policy` and runs allowed DB migrations |
+| [close proof](scripts/super-board-close-proof.py) | A bug or feature card closes only with AFTER screenshots at the merged code and every acceptance box proven by a PASS row; otherwise it returns to QA for evidence ([lane rules](skills/super-board/references/lane-rules.md)) |
 
 ## Models
 
