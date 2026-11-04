@@ -315,6 +315,8 @@ column), never built unchecked. `qa` cards are not pre-flighted: nothing is buil
    (`merge_policy.auto_max_lines`, default 400 changed lines). Growing past it mid-build → stop,
    push what you have, propose the split (vertical slices via `/to-tickets`) in a PR comment and
    move the card to Blocked `❓` — never push on past the cap (super-build → "Keep each PR small").
+4b. A bug you find in a file this card already changes is fixed in this PR (a `Found and fixed:` bullet in
+    the `solution` block); any other bug you find becomes an intake issue, not a bigger diff ([lane-rules.md § 4](lane-rules.md)).
 5. Commit + push (always). Commits follow writing-standard.md § 1 (`✨ [feat] chat: stream replies` + short bullets).
 6. Open draft PR linked to the issue with the PR description template (title in commit-subject format, every block filled).
 7. Follow [PR author notes](pr-author-notes.md), then post the `[builder] [report]` PR comment (see "Commenting cadence").
@@ -371,6 +373,9 @@ For non-visual ACs (API tests, migration SQL, etc.), skip the screenshot block b
 
 If a screenshot file is >5MB, downscale to ≤1920px wide before committing; GitHub's image rendering chokes on huge images.
 
+Rounds, scope, found problems and the close-held evidence pass (a merged card in QA with the close-held marker): see
+super-qa → "Rounds, scope and found problems" and "Close-held evidence pass", and [lane-rules.md](lane-rules.md).
+
 ### Tester (rebuild — when Reviewer bounced for `[qa]` thread fixes)
 
 1. Worktree as above.
@@ -392,6 +397,10 @@ If a screenshot file is >5MB, downscale to ≤1920px wide before committing; Git
    - `[builder]` open → comment, move card Review → Ready.
    - `[qa]` open → comment, move card Review → QA.
    - Both open → bounce to whichever is older; the other gets picked up later.
+   - **A thread-only stop is not a try** ([lane-rules.md § 2](lane-rules.md)): do not add or raise
+     `loop:rebuild-N`, write no Reviewer report, and post one PR comment ending
+     `<!-- super-review:gate1:<issue>:<ids> -->` (ids = the open threads' first-comment database ids).
+     An id already in an earlier gate1 marker on the PR means Build left it open: that stop counts, raise `loop:rebuild-N`.
    - Clean up worktree, exit.
 3. Read the issue ACs and the raw diff (code + test files) FIRST and write 2–4 hypotheses of your own — what must hold, where it would break. Only then read the PR description, the `[builder] [report]` comment and Tester's handoff, and check each claim like a hypothesis. Spot-check Tester's evidence (one screenshot at least), read CLAUDE.md / AGENTS.md.
 3b. **Prior-report check (review remembers — added 2.5.0).** Load the last Reviewer report on this PR as `prior_report`. One call:
@@ -419,7 +428,7 @@ If a screenshot file is >5MB, downscale to ≤1920px wide before committing; Git
    - **Below threshold** — Reviewer MUST NOT approve. Open a `[reviewer]`-prefixed PR thread quoting the lowest-confidence sub-agent finding, write the full Block template comment (see §4 Block/Skip), move card Review → Blocked with reason tag 🛡 truth-check failed (confidence X/100). The card stays Blocked until human review; the bot's "Why I cannot decide" line names the specific sub-agent finding it could not confirm.
    - **Above threshold** — continue to step 7.
    - **No Reproducer needed** — Tester's tests were re-run in step 5.
-7. Decide per finding. First re-apply the Over-engineering rule to every collected finding, whatever a sub-agent wrote: Should fix, never Blocker, never on its own a bounce or block. Then:
+7. Decide per finding. First re-apply the Over-engineering rule to every collected finding, whatever a sub-agent wrote: Should fix, never Blocker, never on its own a bounce or block. Rounds ([lane-rules.md § 3](lane-rules.md)): round 1 lists every problem you can prove; a later round checks only the prior findings and new breakage in lines changed since the prior head. A proven problem outside the issue's scope (its ACs and the plan's scope statement) is filed with `bash .claude/bin/super-review-file-refactor.sh --config <cfg> --found-by review --from-issue <N>` and never bounces the card. Then:
    - **No findings (Over-engineering aside) + threads clean + truth ≥ threshold + tests green** → run the **merge protocol** below. Do not move the card to Done any other way.
    - **Over-engineering only** (from `ponytail:ponytail-review`, see super-review step 3) → list it in the report, open no thread, and carry on to the merge decision; it never bounces a card alone. When the card bounces for another finding anyway, open a `[builder]` thread for each Over-engineering finding too, so the rebuild trims it.
    - **Code-side new finding** → open new `[builder]`-prefixed PR thread, comment, move card Review → Ready (label `loop:rebuild-N`).
@@ -463,8 +472,12 @@ on the base branch**.
      gh pr view <PR> --json state,mergeCommit -q '.state + " " + (.mergeCommit.oid // "none")'
      Expect: MERGED <sha>.  Then verify the sha is reachable from the base branch:
      git fetch origin <base> && git merge-base --is-ancestor <sha> origin/<base>
-4. Only after step 3 passes: close the issue, move card Review → Done, rewrite `status` (`> [!TIP]` ✅ Merged) and append the `history` row, post the `[reviewer] [report] ✅ merged` comment
-   citing the merge commit sha.
+4. Only after step 3 passes: rewrite `status` (`> [!TIP]` ✅ Merged), append the `history` row, post the `[reviewer] [report] ✅ merged` comment
+   citing the merge commit sha, then close through the proof judge ([lane-rules.md § 1](lane-rules.md)):
+     python3 .claude/bin/super-board-close-proof.py close --config <config> --issue <N> --pr <P> --merge <sha> --head "$HEAD"
+   Exit 0 → it commented the proof, ticked the boxes, closed the issue and moved the card to Done.
+   Exit 3 → proof missing: it commented what is missing and moved the card to **QA** (issue open, code merged).
+   Stop there; QA's close-held evidence pass supplies the proof. Never close or move to Done by hand.
 5. Merge through the gate, never with a bare `gh pr merge`. Record the head you
    reviewed when review passes, and hand it to the gate:
      HEAD=$(gh pr view <N> --json headRefOid -q .headRefOid)   # at the moment review passes
@@ -514,6 +527,7 @@ on the base branch**.
 comment (there is no Skipped column). If step 3 cannot be satisfied, the card goes to Blocked,
 never Done. Anything that reads the board — status, halt gate, the
 landed-work progress signal — depends on Done meaning the code is on the base branch.
+A merged card the close proof held (step 4, exit 3) waits in QA with its issue open until the evidence pass closes it; it is never Done without proof.
 
 ## Commenting cadence (issue + PR, every lane)
 

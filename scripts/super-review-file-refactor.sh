@@ -19,12 +19,17 @@
 #     --fingerprint "<module>|<shape-problem>" \
 #     [--files "src/a.ts,src/b.ts"] [--strength strong|worth-exploring|speculative] \
 #     [--area <area>] [--pr <number>] [--column <name>]
+#     [--found-by build|qa|review --from-issue <number>]   # lane-rules.md § 4
+#
+# --found-by files a problem a lane found outside its card's scope instead of a refactor: labels
+# `bug` + `found-by:<lane>`, title `🐛 [fix] ...`, a `Found while working #N` link, a comment with the
+# new number on #N, and the board's intake column (config `intake_column`, default Backlog), never Ready.
 #
 # Stdout: the issue number (new, or the existing one on a fingerprint hit).
 set -euo pipefail
 
 CONFIG=""; TITLE=""; BODY_FILE=""; FINGERPRINT=""
-FILES=""; STRENGTH="worth-exploring"; AREA=""; PR=""; COLUMN=""
+FILES=""; STRENGTH="worth-exploring"; AREA=""; PR=""; COLUMN=""; FOUND_BY=""; FROM_ISSUE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,6 +42,8 @@ while [ $# -gt 0 ]; do
     --area)        AREA="$2"; shift 2 ;;
     --pr)          PR="$2"; shift 2 ;;
     --column)      COLUMN="$2"; shift 2 ;;
+    --found-by)    FOUND_BY="$2"; shift 2 ;;
+    --from-issue)  FROM_ISSUE="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 64 ;;
   esac
 done
@@ -52,6 +59,12 @@ case "$STRENGTH" in
   strong|worth-exploring|speculative) ;;
   *) echo "--strength must be strong|worth-exploring|speculative (got: $STRENGTH)" >&2; exit 64 ;;
 esac
+
+case "$FOUND_BY" in
+  ""|build|qa|review) ;;
+  *) echo "--found-by must be build|qa|review (got: $FOUND_BY)" >&2; exit 64 ;;
+esac
+[ -z "$FOUND_BY" ] || [[ "$FROM_ISSUE" =~ ^[0-9]+$ ]] || { echo "--found-by needs --from-issue <number>" >&2; exit 64; }
 
 # Ticket format: writing-standard.md § 3. The Reviewer writes Problem, Context and
 # Fix; Acceptance Criteria, Risk and Blocked by are appended below when absent.
@@ -111,7 +124,9 @@ fi
 # This used to be an unconditional `Backlog`, which was wrong twice over: it fed
 # nothing to the loop even when the card was ready, and on a board with no
 # `Backlog` column it produced cards with no Status at all.
-if [ -z "$COLUMN" ]; then
+if [ -z "$COLUMN" ] && [ -n "$FOUND_BY" ]; then
+  COLUMN=$(echo "$CONFIG_JSON" | jq -r '.intake_column // "Backlog"')
+elif [ -z "$COLUMN" ]; then
   if grep -qiE '^## +Acceptance criteria *$' "$BODY_FILE"; then COLUMN="Ready"; else COLUMN="Backlog"; fi
 fi
 
@@ -159,15 +174,21 @@ trap 'rm -f "$BODY_TMP"' EXIT
     echo "**Files:** $(echo "$FILES" | tr ',' '\n' | sed 's/^/`/; s/$/`/' | paste -sd ', ' -)"
   fi
   if [ -n "$PR" ]; then echo "**Spotted reviewing:** #${PR}"; fi
-  echo "**Recommendation strength:** ${STRENGTH}"
-  echo
-  echo "_Filed by Super Review. Not a merge blocker — the PR that surfaced this merged._"
-  echo "_Run \`improve-codebase-architecture\` against this card to design the fix._"
+  if [ -n "$FOUND_BY" ]; then
+    echo "**Found while working:** #${FROM_ISSUE} (found by ${FOUND_BY}; outside that card's scope, so it is its own card)"
+    echo
+    echo "_Filed by the ${FOUND_BY} lane. Not a blocker for #${FROM_ISSUE}._"
+  else
+    echo "**Recommendation strength:** ${STRENGTH}"
+    echo
+    echo "_Filed by Super Review. Not a merge blocker — the PR that surfaced this merged._"
+    echo "_Run \`improve-codebase-architecture\` against this card to design the fix._"
+  fi
   echo
   echo "$STAMP"
 } > "$BODY_TMP"
 
-LABELS=("refactor" "source:review" "strength:${STRENGTH}")
+if [ -n "$FOUND_BY" ]; then LABELS=("bug" "found-by:${FOUND_BY}"); else LABELS=("refactor" "source:review" "strength:${STRENGTH}"); fi
 if [ -n "$AREA" ]; then LABELS+=("area:${AREA}"); fi
 
 # Labels may not exist yet on a fresh repo. Create them best-effort; `gh issue
@@ -188,12 +209,17 @@ TITLE=$(printf '%s' "$TITLE" | LC_ALL=C sed -E 's/^[^ -~]{1,16} \[[a-z-]+\] [^:]
 SCOPE="${AREA:-${FINGERPRINT%%|*}}"
 SCOPE=$(echo "${SCOPE:-code}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._/-]+#-#g; s#^-+|-+$##g')
 python3 "$GITHUB_READ" --check || exit $?
+KIND_PREFIX="♻️ [refactor]"; [ -z "$FOUND_BY" ] || KIND_PREFIX="🐛 [fix]"
 ISSUE_URL=$(gh issue create "${REPO_FLAG[@]}" \
-  --title "♻️ [refactor] ${SCOPE:-code}: ${TITLE}" \
+  --title "${KIND_PREFIX} ${SCOPE:-code}: ${TITLE}" \
   --body-file "$BODY_TMP" \
   "${LABEL_ARGS[@]}") || { python3 "$GITHUB_READ" --halt "Issue creation response failed; reconcile fingerprint ${FINGERPRINT} before retrying"; exit 79; }
 
 ISSUE_N=$(basename "$ISSUE_URL")
+if [ -n "$FOUND_BY" ]; then
+  gh issue comment "$FROM_ISSUE" "${REPO_FLAG[@]}" --body "Out of this card's scope, filed as #${ISSUE_N} (found by ${FOUND_BY})." >/dev/null 2>&1 \
+    || echo "warn: filed #${ISSUE_N} but could not comment on #${FROM_ISSUE}" >&2
+fi
 
 # --- place on the board -----------------------------------------------------
 # The holding column is deliberately NOT in the config's managed `columns` list,

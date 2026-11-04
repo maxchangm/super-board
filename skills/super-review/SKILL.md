@@ -313,6 +313,10 @@ See `.claude/skills/super-board/references/run.md` → Reviewer. Summary of the 
    - `[builder]` open → comment, move card Review → Ready.
    - `[qa]` open → comment, move card Review → QA.
    - Both open → bounce to whichever is older.
+   - **A thread-only stop is not a try** ([lane-rules.md § 2](../super-board/references/lane-rules.md)): do not add or raise
+     `loop:rebuild-N`, write no Reviewer report, and post one PR comment ending
+     `<!-- super-review:gate1:<issue>:<ids> -->` (ids = the open threads' first-comment database ids).
+     An id already in an earlier gate1 marker on the PR means Build left it open: that stop counts, raise `loop:rebuild-N`.
    - Clean up worktree, exit.
 3. Read PR + spot-check Tester evidence + read CLAUDE.md / AGENTS.md.
    Check the Risk block against the diff: is the Door right (one-way: DROP, rename, data rewrite, public API, sent email) and the Blast radius honest? Fix it with `super-board-pr-body.sh --block risk`; a one-way door is never 🟢.
@@ -328,7 +332,7 @@ See `.claude/skills/super-board/references/run.md` → Reviewer. Summary of the 
      check hashes/revisions and performance AC budgets. Never infer a speed win
      from exit 0 or an inconclusive result. Runtime checks supplement local tests.
 6. **Adversarial mode** (per `config.truth_gate` — `off` / `non-trivial` / `always`, default `non-trivial`): see section below.
-7. Decide per finding. First apply the Over-engineering rule to every finding collected —
+7. Decide per finding. Rounds ([lane-rules.md § 3](../super-board/references/lane-rules.md)): round 1 lists every problem you can prove; a later round checks only the prior findings and new breakage in lines changed since the prior head. A proven problem outside the issue's scope (its ACs and the plan's scope statement) is filed with `bash .claude/bin/super-review-file-refactor.sh --config <cfg> --found-by review --from-issue <N>` and never bounces the card. First apply the Over-engineering rule to every finding collected —
    yours, `ponytail:ponytail-review`'s and the truth-check sub-agents': Over-engineering is
    Should fix, never Blocker, and never on its own a reason to bounce or block. Then:
    - **Deepening opportunity** → `scripts/super-review-file-refactor.sh`, then keep going. It is not a finding for merge purposes and never bounces a card.
@@ -383,8 +387,12 @@ two complete builds. In order, no shortcuts:
    `gh pr view <PR> --json state,mergeCommit` must report `MERGED` plus a commit sha,
    and that sha must be an ancestor of the base branch
    (`git merge-base --is-ancestor <sha> origin/<base>`).
-4. Only then: close the issue, move card Review → **Done**, post the ✅ comment citing
-   the merge commit sha.
+4. Only then: post the ✅ comment citing the merge commit sha, then close through the proof judge
+   ([lane-rules.md § 1](../super-board/references/lane-rules.md)):
+   `python3 .claude/bin/super-board-close-proof.py close --config <cfg> --issue <N> --pr <P> --merge <sha> --head <reviewed head>`.
+   Exit 0: it posted the proof, ticked the boxes, closed the issue and moved the card to **Done**.
+   Exit 3: the AFTER screenshots or a PASS row are missing; it moved the card to **QA** and left the issue open.
+   Stop there. Never close or move to Done by hand.
 5. Merge refused (failing checks, conflicts, branch protection) → card Review →
    **Blocked** with the §4 Block template naming the blocker. Never leave it in Review;
    a card left in Review gets re-picked and re-reviewed indefinitely.

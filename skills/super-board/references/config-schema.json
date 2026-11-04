@@ -319,6 +319,25 @@
   // defined in §7 Halt gates.
   "rebuild_cap": 2,
 
+  // Optional. Project details for the close proof (references/lane-rules.md § 1,
+  // scripts/super-board-close-proof.py). Every key is optional.
+  "close_proof": {
+    // Which changed files count as UI for an approved-change card. A `!` prefix excludes; the last
+    // matching glob wins. Unset: every file counts as UI, so the card needs its AFTER screenshots.
+    "ui_globs": ["src/app/**", "!src/app/api/**", "src/components/**", "**/*.css"],
+    // Comments carrying one of these markers hold the card's BEFORE images (for example a repro lane).
+    "before_markers": ["<!-- repro -->"],
+    // Comments carrying one of these markers never count as AFTER proof (project lanes that post images).
+    "skip_markers": ["<!-- fuzz -->"],
+    // Where the project explains how to publish a screenshot that outlives the branch (a doc path and
+    // section). The close-held evidence pass follows it; unset, it commits the PNGs to an evidence branch.
+    "evidence_route": ".agents/github-issue-workflow.md → Route B"
+  },
+
+  // Optional. The column a problem found outside a card's scope is filed into (lane-rules.md § 4).
+  // Default "Backlog". Never Ready.
+  "intake_column": "Backlog",
+
   // When the count of Blocked cards exceeds this percent of the initial Ready
   // count, post a mid-run breakdown in the run report. Default `30`. Set to `0`
   // to disable.

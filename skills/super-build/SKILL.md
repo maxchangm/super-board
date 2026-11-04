@@ -247,6 +247,12 @@ Follow spec `.claude/skills/super-board/references/run.md` → Builder (first pa
 7. Follow [PR author notes](../super-board/references/pr-author-notes.md), then post the `[builder] [report]` PR comment + the short issue comment with the PR URL (writing-standard.md § 4).
 8. Move card Ready/Building → QA.
 
+### Bugs you find on the way
+[lane-rules.md § 4](../super-board/references/lane-rules.md). A bug you find while working that sits in a file this card **already changes**
+is fixed in the same PR, with a `Found and fixed:` bullet in the PR body's `solution` block. Any other bug you find becomes an issue
+(`bash .claude/bin/super-review-file-refactor.sh --config <cfg> --found-by build --from-issue <N> ...`, filed into the intake column) and
+does not widen this diff. If the plan lists known bugs in the files it changes, fix those first.
+
 ### Keep each PR small (every ticket)
 Each PR stays under the merge size cap: `merge_policy.auto_max_lines` (default 400 changed lines,
 additions + deletions; lockfiles, generated files, snapshots and migration SQL do not count — see
