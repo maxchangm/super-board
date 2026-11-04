@@ -422,7 +422,7 @@ unset STUB_APPROVAL STUB_COMMENTS STUB_VERIFIED
 teardown
 
 # 16c2 — D35: an approval survives the merge step bringing the PR up to date with the base, but only
-# while the PR's own changes (patch-id of its diff against the merge base) are identical.
+# while the PR's own changes (a hash of its exact diff against the merge base) are identical.
 git_t() { git -C "$TMP" -c user.email=t@t -c user.name=t "$@"; }
 carry_setup() {
   head_setup
@@ -431,7 +431,7 @@ carry_setup() {
   export STUB_APPROVAL=1 STUB_COMMENTS="$TMP/comments.json"; echo '[[]]' > "$STUB_COMMENTS"
   OUT=$(STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SHA" 2>/dev/null || true)
   REQUEST=$(echo "$OUT" | sed -n 's/^approval-request: //p')
-  echo "$REQUEST" | jq -e '.patch' >/dev/null || fail "a hold must pin the PR's patch-id in the request, got: $REQUEST"
+  echo "$REQUEST" | jq -e '.patch' >/dev/null || fail "a hold must pin the PR's fingerprint in the request, got: $REQUEST"
   make_approval
   RC=0; STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SHA" >/dev/null 2>&1 || RC=$?
   [ "$RC" -eq 0 ] || fail "the approved head itself must merge, got $RC"
@@ -452,6 +452,14 @@ grep -q -- "--match-head-commit $NEW" "$GH_LOG" || fail "the merge must pin the 
 git_t checkout -q -B rebased "$SHA"; git_t rebase -q staging; git_t push -q -f origin rebased:feat; NEW2=$(git_t rev-parse rebased); git_t checkout -q staging
 RC=0; OUT=$(STUB_OID="$NEW2" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW2" 2>&1) || RC=$?
 [ "$RC" -eq 0 ] || fail "a rebase with identical own changes must keep the approval, got $RC: $OUT"
+teardown
+carry_setup
+# RED: a whitespace-only change to an added line is still a change (YAML, Python, string literals).
+git_t checkout -q feat; echo "one " > "$TMP/f.txt"; git_t commit -q -am "trailing space"; git_t push -q origin feat; NEW=$(git_t rev-parse feat); git_t checkout -q staging
+RC=0; OUT=$(STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" 2>&1) || RC=$?
+[ "$RC" -eq 7 ] || fail "a whitespace-only change to the PR's own diff must void the approval, got $RC: $OUT"
+grep -q '^pr merge' "$GH_LOG" && fail "a whitespace-only change must not merge under the old approval"
+: > "$GH_LOG"
 teardown
 # RED: one changed line in the PR's own diff voids the approval and asks again.
 carry_setup

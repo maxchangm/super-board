@@ -40,26 +40,26 @@ class ApprovalTests(unittest.TestCase):
 
     def test_done_before_processing_does_not_get_rebound_to_new_head(self):
         records = evidence()
-        self.assertFalse(self.check(records, dict(REQUEST, head="c" * 40))["approved"])
+        self.assertFalse(self.check(records, dict(REQUEST, head="c" * 64))["approved"])
 
     def test_changed_human_steps_revoke_same_head(self):
         newer = dict(REQUEST, scope=approval.scope_for(dict(PLAN, needs_you=["different operation"])))
         self.assertFalse(self.check(expected=newer)["approved"])
 
     def test_approval_carries_to_a_newer_head_with_the_same_patch(self):
-        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 40)
+        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 64)
         records = [comment("Reason tag: 🙋 needs you\n" + approval.marker(request), 1), comment("done", 2)]
         newer = dict(request, head="b" * 40)
         result = self.check(records, newer)
         self.assertTrue(result["approved"])
         self.assertEqual(result["carriedFrom"], HEAD)
-        self.assertFalse(self.check(records, dict(newer, patch="d" * 40))["approved"], "a changed own diff needs a new request")
+        self.assertFalse(self.check(records, dict(newer, patch="d" * 64))["approved"], "a changed own diff needs a new request")
         self.assertFalse(self.check(records, {k: v for k, v in newer.items() if k != "patch"})["approved"], "no fingerprint, no carry-over")
         self.assertFalse(self.check(records, dict(newer, scope="e" * 64))["approved"], "changed human steps still void it")
         self.assertFalse(self.check(evidence(), newer)["approved"], "an old request without a patch never carries")
 
     def test_carried_approval_still_needs_a_human_done(self):
-        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 40)
+        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 64)
         for login, actor in (("bot[bot]", "Bot"), ("visitor", "User")):
             records = [comment("Reason tag: 🙋 needs you\n" + approval.marker(request), 1), comment("done", 2, login=login, actor=actor)]
             self.assertFalse(self.check(records, dict(request, head="b" * 40), {"owner": "admin", "bot[bot]": "admin", "visitor": "read"})["approved"])

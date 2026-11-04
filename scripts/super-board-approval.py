@@ -24,7 +24,7 @@ _reader_spec.loader.exec_module(github_read)
 PREFIX = "approval-request: "
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 SCOPE = re.compile(r"[0-9a-f]{64}\Z")
-PATCH = re.compile(r"[0-9a-f]{40}\Z")
+PATCH = re.compile(r"[0-9a-f]{64}\Z")
 BLOCK = re.compile(r"Reason tag:[^\n]*🙋|^approval-request:", re.M)
 DONE = re.compile(r"\s*done[.!]?\s*\Z", re.I)
 # GitHub's closing keywords: KEYWORD[:] #N or KEYWORD[:] owner/repo#N.
@@ -43,7 +43,8 @@ def scope_for(plan):
 
 
 def request_for(repo, pr, head, scope, patch=None):
-    # patch: `git patch-id --stable` of the PR's own changes (its diff against the merge base with the base branch).
+    # patch: sha256 of the PR's own changes, byte for byte (its diff against the merge base with the base branch,
+    # minus hunk line numbers and index lines; the merge gate builds it).
     request = {"repo": repo.lower(), "pr": int(pr), "head": head, "scope": scope}
     if patch:
         request["patch"] = patch
@@ -53,7 +54,7 @@ def request_for(repo, pr, head, scope, patch=None):
 def covers(request, expected):
     """Does an approved request still describe the code and steps being checked?
 
-    Same head: yes. A newer head: only when both carry the same patch-id, so merging the base into the
+    Same head: yes. A newer head: only when both carry the same diff hash, so merging the base into the
     PR keeps the approval while any change to the PR's own diff (even a force-push) voids it.
     """
     rest = {k: v for k, v in expected.items() if k not in ("head", "patch")}
@@ -259,7 +260,7 @@ def main():
     ap.add_argument("--repo", required=True)
     ap.add_argument("--pr", type=int)
     ap.add_argument("--head")
-    ap.add_argument("--patch", help="git patch-id --stable of the PR's own changes; lets an approval survive a base merge")
+    ap.add_argument("--patch", help="sha256 of the PR's exact own diff; lets an approval survive a base merge")
     ap.add_argument("--plan", help="JSON plan from merge-policy")
     ap.add_argument("--request", action="store_true", help="print a pinned request; no network or writes")
     ap.add_argument("--deps", action="store_true", help="enrich the dependency graph on stdin")
