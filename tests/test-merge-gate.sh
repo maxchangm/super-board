@@ -158,6 +158,7 @@ STUB
   REAL_GIT=$(command -v git)
   cat > "$TMP/bin/git" <<STUB
 #!/usr/bin/env bash
+case "\$*" in *--full-index*) [ -z "\${STUB_FP_FAIL:-}" ] || { echo partial-output; exit 1; } ;; esac
 case "\$1 \$2" in
   "fetch --quiet") exit 0 ;;
   "diff --no-color")
@@ -426,7 +427,11 @@ teardown
 git_t() { git -C "$TMP" -c user.email=t@t -c user.name=t "$@"; }
 carry_setup() {
   head_setup
-  git_t checkout -q feat; echo one > "$TMP/f.txt"; git_t add f.txt; git_t commit -q -m "own change"; git_t push -q origin feat
+  git_t checkout -q staging; seq 1 20 > "$TMP/big.txt"; git_t add big.txt; git_t commit -q -m "big"; git_t push -q origin staging
+  git_t checkout -q feat; git_t merge -q --no-edit staging
+  sed -i.bak '3a\
+ADD' "$TMP/big.txt"; rm -f "$TMP/big.txt.bak"
+  echo one > "$TMP/f.txt"; git_t add f.txt big.txt; git_t commit -q -m "own change"; git_t push -q origin feat
   SHA=$(git_t rev-parse feat); git_t checkout -q staging
   export STUB_APPROVAL=1 STUB_COMMENTS="$TMP/comments.json"; echo '[[]]' > "$STUB_COMMENTS"
   OUT=$(STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SHA" 2>/dev/null || true)
@@ -460,6 +465,22 @@ RC=0; OUT=$(STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-hea
 [ "$RC" -eq 7 ] || fail "a whitespace-only change to the PR's own diff must void the approval, got $RC: $OUT"
 grep -q '^pr merge' "$GH_LOG" && fail "a whitespace-only change must not merge under the old approval"
 : > "$GH_LOG"
+teardown
+# RED: the same added line moved elsewhere in the file (another branch of an if) is a different change.
+carry_setup
+git_t checkout -q feat; git_t checkout -q "$SHA"~1 -- big.txt; sed -i.bak '15a\
+ADD' "$TMP/big.txt"; rm -f "$TMP/big.txt.bak"; git_t commit -q -am "move the line"; git_t push -q origin feat; NEW=$(git_t rev-parse feat); git_t checkout -q staging
+RC=0; OUT=$(STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" 2>&1) || RC=$?
+[ "$RC" -eq 7 ] || fail "a moved hunk must void the approval, got $RC: $OUT"
+grep -q '^pr merge' "$GH_LOG" && fail "a moved hunk must not merge under the old approval"
+teardown
+# RED: a failed diff gives no carry-over, and the new request carries no fingerprint.
+carry_setup
+git_t commit -q --allow-empty -m "dev moves"; git_t push -q origin staging
+git_t checkout -q feat; git_t merge -q --no-edit staging; git_t push -q origin feat; NEW=$(git_t rev-parse feat); git_t checkout -q staging
+RC=0; OUT=$(STUB_FP_FAIL=1 STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" 2>&1) || RC=$?
+[ "$RC" -eq 7 ] || fail "a failed diff must not carry the approval, got $RC: $OUT"
+echo "$OUT" | sed -n 's/^approval-request: //p' | jq -e 'has("patch") | not' >/dev/null || fail "a failed diff must not pin a fingerprint, got: $OUT"
 teardown
 # RED: one changed line in the PR's own diff voids the approval and asks again.
 carry_setup
