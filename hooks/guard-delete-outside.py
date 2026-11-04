@@ -9,7 +9,7 @@ cannot be known before it runs (a `$(...)`, or a variable assigned earlier in th
 command) is allowed: the guard catches the literal mistakes, not every possible one.
 
 Temp roots stay deletable inside (not the roots themselves): /tmp, /private/tmp,
-/var/folders and $TMPDIR. `git clean` is denied only when it would run in a directory
+/var/folders, $TMPDIR and the absolute paths in $SUPER_BOARD_DELETE_ALLOW (colon-separated; unset by default). `git clean` is denied only when it would run in a directory
 outside the project.
 
 Its own errors never block a tool call: anything unexpected exits 0 with no output.
@@ -104,6 +104,7 @@ def verdict(path, project, env):
     if any(under(p, r) for p in forms for r in roots):
         return None
     temps = TEMP_ROOTS + ([os.path.normpath(env["TMPDIR"])] if env.get("TMPDIR") else [])
+    temps += [os.path.normpath(r) for r in env.get("SUPER_BOARD_DELETE_ALLOW", "").split(":") if r]
     if any(under(p, t) and p.rstrip(os.sep) != t.rstrip(os.sep) for p in forms for t in temps):
         return None
     return "is outside the project (%s)" % project

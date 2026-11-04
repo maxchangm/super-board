@@ -19,7 +19,8 @@ SECRET_RE = re.compile("|".join([
     r"\.env\.(?:local|production|prod|staging|development|dev|test)" + E,
     B + r"id_(?:rsa|ed25519|ecdsa)" + E,
     B + r"\.npmrc" + E,
-    B + r"credentials(?:\.json)?" + E,
+    r"/credentials(?:\.json)?" + E,   # a file named credentials: ~/.aws/credentials, never the plain word in prose
+    B + r"credentials\.json" + E,
     r"service-account[A-Za-z0-9._-]*\.json",
     r"\.pem" + E,
 ]))
