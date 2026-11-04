@@ -46,6 +46,27 @@ class ApprovalTests(unittest.TestCase):
         newer = dict(REQUEST, scope=approval.scope_for(dict(PLAN, needs_you=["different operation"])))
         self.assertFalse(self.check(expected=newer)["approved"])
 
+    def test_approval_carries_to_a_newer_head_with_the_same_patch(self):
+        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 40)
+        records = [comment("Reason tag: 🙋 needs you\n" + approval.marker(request), 1), comment("done", 2)]
+        newer = dict(request, head="b" * 40)
+        result = self.check(records, newer)
+        self.assertTrue(result["approved"])
+        self.assertEqual(result["carriedFrom"], HEAD)
+        self.assertFalse(self.check(records, dict(newer, patch="d" * 40))["approved"], "a changed own diff needs a new request")
+        self.assertFalse(self.check(records, {k: v for k, v in newer.items() if k != "patch"})["approved"], "no fingerprint, no carry-over")
+        self.assertFalse(self.check(records, dict(newer, scope="e" * 64))["approved"], "changed human steps still void it")
+        self.assertFalse(self.check(evidence(), newer)["approved"], "an old request without a patch never carries")
+
+    def test_carried_approval_still_needs_a_human_done(self):
+        request = approval.request_for("x/y", 9, HEAD, approval.scope_for(PLAN), "c" * 40)
+        for login, actor in (("bot[bot]", "Bot"), ("visitor", "User")):
+            records = [comment("Reason tag: 🙋 needs you\n" + approval.marker(request), 1), comment("done", 2, login=login, actor=actor)]
+            self.assertFalse(self.check(records, dict(request, head="b" * 40), {"owner": "admin", "bot[bot]": "admin", "visitor": "read"})["approved"])
+
+    def test_malformed_patch_in_a_request_is_rejected(self):
+        self.assertIsNone(approval.parse_request(comment(approval.marker(dict(REQUEST, patch="nothex")), 1)))
+
     def test_label_only_or_bare_done_is_not_approval(self):
         self.assertFalse(self.check([comment("done", 2)])["approved"])
 
