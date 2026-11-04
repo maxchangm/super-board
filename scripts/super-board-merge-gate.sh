@@ -247,13 +247,14 @@ PLAN=$(python3 "$HERE/super-board-merge-policy.py" --config "$CONFIG" --meta "$M
 # and policy/commands. Re-read trusted approval evidence; never mint it here.
 APPROVED=false
 # The PR's own changes: sha256 of its exact diff against the merge base with ${BASE}, byte for byte (whitespace
-# included, so a trailing-space edit is a change). Two things that move when ${BASE} moves are dropped: the line
+# included, so a trailing-space edit is a change) with 3 lines of context, so a moved hunk is a change too.
+# A dev update that touches lines near the PR's own change asks for a new approval: the safe direction. Two things that move when ${BASE} moves are dropped: the line
 # numbers in "@@" hunk headers and the "index" blob-hash lines. An approval for an earlier head still counts when
 # the branch only caught up with ${BASE} and this hash is unchanged. Empty (any git failure, empty diff) means no
 # carry-over: the approval then needs the exact head.
 EMPTY_HASH=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-PATCH_ID=$( { MB=$(git -C "$REPO_PATH" merge-base "origin/${BASE}" "$HEAD_SHA") \
-  && git -C "$REPO_PATH" diff --no-color --no-ext-diff --no-renames --full-index -U0 "$MB" "$HEAD_SHA" \
+PATCH_ID=$( { set -o pipefail; MB=$(git -C "$REPO_PATH" merge-base "origin/${BASE}" "$HEAD_SHA") \
+  && git -C "$REPO_PATH" diff --no-color --no-ext-diff --no-renames --full-index -U3 "$MB" "$HEAD_SHA" \
      | LC_ALL=C sed -E -e '/^index [0-9a-f]+\.\.[0-9a-f]+/d' -e 's/^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/@@/' \
      | shasum -a 256 | cut -d' ' -f1; } 2>/dev/null ) || PATCH_ID=
 [ "$PATCH_ID" != "$EMPTY_HASH" ] || PATCH_ID=
