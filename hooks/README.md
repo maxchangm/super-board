@@ -6,9 +6,9 @@ so a broken guard never stops unrelated work. All of the below are on by default
 protected-push guard (opt-in) and the dev-only skill-eval gate.
 
 - `guard-worktree-path.py` — PreToolUse `Bash`: denies `git worktree add|move` whose target resolves outside `<repo>/.claude/worktrees/` (honours `cd X &&`, `git -C X`).
-- `guard-secrets.py` — PreToolUse `Bash|Read|Grep`: denies reading or piping dotenv files, SSH keys, `.npmrc`, `credentials(.json)`, service-account JSON and `.pem`; `.env.example` stays readable. One plain call to `super-board-env-check.sh KEY…` is allowed: it prints present / empty / missing per key and never a value (no pipe, chain or redirect may ride along).
+- `guard-secrets.py` — PreToolUse `Bash|Read|Grep`: denies reading or piping dotenv files, SSH keys, `.npmrc`, a file named `credentials` or `credentials.json` (the plain word in a command or a report is fine), service-account JSON and `.pem`; `.env.example` stays readable. One plain call to `super-board-env-check.sh KEY…` is allowed: it prints present / empty / missing per key and never a value (no pipe, chain or redirect may ride along).
 - `guard-key-literals.py` — PreToolUse `Edit|MultiEdit|Write|NotebookEdit|Bash`: denies writing a live-looking API key into a file; PostToolUse `Edit|MultiEdit|Write|NotebookEdit`: flags one already on disk. Reports line numbers, never the value.
-- `guard-delete-outside.py` — PreToolUse `Bash`: denies `rm`, `rmdir`, `unlink`, `find … -delete` / `-exec rm` and `git clean` whose target resolves outside `$CLAUDE_PROJECT_DIR`, and always `/` or `~` itself (honours `cd X &&`, `git -C X`, `~`, `$HOME`). Inside `/tmp`, `/private/tmp`, `/var/folders` and `$TMPDIR` stays allowed. A path whose value is only known at run time (`$(…)`, a variable set earlier in the same command) is allowed.
+- `guard-delete-outside.py` — PreToolUse `Bash`: denies `rm`, `rmdir`, `unlink`, `find … -delete` / `-exec rm` and `git clean` whose target resolves outside `$CLAUDE_PROJECT_DIR`, and always `/` or `~` itself (honours `cd X &&`, `git -C X`, `~`, `$HOME`). Inside `/tmp`, `/private/tmp`, `/var/folders`, `$TMPDIR` and any absolute path in `$SUPER_BOARD_DELETE_ALLOW` (colon-separated, unset by default) stays allowed. A path whose value is only known at run time (`$(…)`, a variable set earlier in the same command) is allowed.
 - `cleanup-wt.py` — SessionStart (`--auto`): when a base branch tip moved since the last session, removes worktrees and local branches already merged into it. The merge gate also runs it with `--post-merge --branch <PR head branch>` after every merge, which touches only that branch and its worktree. In both hook modes a worktree outside `.claude/worktrees/` is never removed: it is not a task worktree (#479). Never deletes unmerged work (a dirty worktree on a merged branch is wip-committed and its branch kept), never touches bases or the worktree it runs in, and writes a recovery TSV to `<git-common-dir>/cleanup-wt/<timestamp>.tsv` before acting. Restore with `git branch <name> <sha>`. A manual dry run (`python3 .claude/hooks/cleanup-wt.py`, then `--apply`) still works.
 
 ## Enable
@@ -126,6 +126,24 @@ Wired in this pack's `.claude/settings.json`. For EricOS, add to its `.claude/se
 ```
 
 Adapted from `gate-skill-evals.sh` in Eric Tech's ai-builder-starter-kit.
+
+## Guards as a plugin (Claude Code and Codex)
+
+`hooks/` is also the root of the hooks-only plugin `super-board-guards` (marketplace `super-board`). It wires
+`guard-delete-outside`, `guard-secrets` and `guard-key-literals` without touching `.claude/settings.json`:
+`hooks.json` for Claude Code (`${CLAUDE_PLUGIN_ROOT}`), `codex-hooks.json` for Codex, referenced by
+`.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Do not run it together with `install.sh` hooks in one
+session: both would run the same guards. The plugin has no skills. For a project that wants the `.claude/bin` scripts
+and workflows too, run `install.sh --no-hooks` and install the plugin.
+
+Codex runs a plugin hook only when its hash is trusted in `$CODEX_HOME/config.toml` (`[hooks.state."<key>"]
+trusted_hash`) or the run passes `--dangerously-bypass-hook-trust`. Codex has no `Read` or `Grep` tool and names its
+shell `Bash` and its edit tool `apply_patch`, so on Codex `guard-secrets` watches shell commands and
+`guard-key-literals` scans the added lines of an `apply_patch` and shell commands. Codex sets no `CLAUDE_PROJECT_DIR`:
+`guard-delete-outside` then takes the git root of the hook's `cwd` as the project.
+
+A `SessionStart` hook appends one line (`<time> super-board-guards host=<claude|codex> guards=...`) to the file named
+by `SUPER_BOARD_HOOK_LOG` when that variable is set, and does nothing otherwise.
 
 Tests: `tests/test-guard-hooks.sh` (all guards and the eval gate), `tests/test-cleanup-wt.sh`.
 

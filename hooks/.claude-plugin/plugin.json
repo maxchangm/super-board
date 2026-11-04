@@ -1,0 +1,10 @@
+{
+  "name": "super-board-guards",
+  "version": "3.1.2",
+  "description": "Super Board guard hooks as a plugin: guard-delete-outside, guard-secrets and guard-key-literals. Hooks only, no skills.",
+  "author": { "name": "Eric Tech" },
+  "homepage": "https://github.com/EricTechPro/super-board",
+  "repository": "https://github.com/EricTechPro/super-board",
+  "license": "MIT",
+  "hooks": "./hooks.json"
+}

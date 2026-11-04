@@ -3,13 +3,13 @@
 
 Denies `rm`, `rmdir`, `unlink`, `find ... -delete` / `find ... -exec rm`, and `git clean`
 when a target resolves outside $CLAUDE_PROJECT_DIR, and always when it is `/` or the home
-directory itself. Paths are resolved against the hook's `cwd`, honouring `cd X &&`; `~`,
+directory itself. Codex sets no CLAUDE_PROJECT_DIR, so the project is the git root of the hook's `cwd`. Paths are resolved against the hook's `cwd`, honouring `cd X &&`; `~`,
 `$HOME` and other set variables are expanded the way the shell would. A word whose value
 cannot be known before it runs (a `$(...)`, or a variable assigned earlier in the same
 command) is allowed: the guard catches the literal mistakes, not every possible one.
 
 Temp roots stay deletable inside (not the roots themselves): /tmp, /private/tmp,
-/var/folders and $TMPDIR. `git clean` is denied only when it would run in a directory
+/var/folders, $TMPDIR and the absolute paths in $SUPER_BOARD_DELETE_ALLOW (colon-separated; unset by default). `git clean` is denied only when it would run in a directory
 outside the project.
 
 Its own errors never block a tool call: anything unexpected exits 0 with no output.
@@ -17,6 +17,7 @@ Its own errors never block a tool call: anything unexpected exits 0 with no outp
 import json
 import os
 import re
+import subprocess
 import sys
 
 RM_CMDS = {"rm", "rmdir", "unlink", "trash"}
@@ -103,6 +104,7 @@ def verdict(path, project, env):
     if any(under(p, r) for p in forms for r in roots):
         return None
     temps = TEMP_ROOTS + ([os.path.normpath(env["TMPDIR"])] if env.get("TMPDIR") else [])
+    temps += [os.path.normpath(r) for r in env.get("SUPER_BOARD_DELETE_ALLOW", "").split(":") if r]
     if any(under(p, t) and p.rstrip(os.sep) != t.rstrip(os.sep) for p in forms for t in temps):
         return None
     return "is outside the project (%s)" % project
@@ -183,6 +185,15 @@ def check(command, cwd, project, env):
     return None
 
 
+def git_root(cwd):
+    """The git work tree holding cwd, or None."""
+    try:
+        out = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or None if out.returncode == 0 else None
+    except Exception:
+        return None
+
+
 def main():
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -190,7 +201,7 @@ def main():
         if not isinstance(command, str):
             return
         cwd = payload.get("cwd") or os.getcwd()
-        project = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or cwd)
+        project = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or git_root(cwd) or cwd)  # Codex sets no CLAUDE_PROJECT_DIR
         reason = check(command, cwd, project, dict(os.environ))
         if reason:
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
