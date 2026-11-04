@@ -246,15 +246,27 @@ PLAN=$(python3 "$HERE/super-board-merge-policy.py" --config "$CONFIG" --meta "$M
 # The label is display-only. A request posted before `done` pins the exact head
 # and policy/commands. Re-read trusted approval evidence; never mint it here.
 APPROVED=false
+# The PR's own changes: its diff against the merge base with ${BASE}, as a stable patch-id. An approval for an
+# earlier head still counts when the branch only caught up with ${BASE} and this id is unchanged. Empty (any
+# git failure, empty diff) means no carry-over: the approval then needs the exact head.
+git -C "$REPO_PATH" fetch origin "$HEAD_REF" "$BASE" --quiet
+PATCH_ID=$( { MB=$(git -C "$REPO_PATH" merge-base "origin/${BASE}" "$HEAD_SHA") \
+  && git -C "$REPO_PATH" diff "$MB" "$HEAD_SHA" | git patch-id --stable | cut -d' ' -f1; } 2>/dev/null ) || PATCH_ID=
+CARRY_LOGGED=false
 approval_check() {
   APPROVAL=$(python3 "$HERE/super-board-approval.py" --repo "$REPO" --pr "$PR" \
-    --config "$CONFIG" --head "$HEAD_SHA" --plan "$PLAN") || APPROVAL='{"approved":false}'
+    --config "$CONFIG" --head "$HEAD_SHA" --plan "$PLAN" ${PATCH_ID:+--patch "$PATCH_ID"}) || APPROVAL='{"approved":false}'
   python3 "$GITHUB_READ" --check || exit $?
   APPROVED=$(echo "$APPROVAL" | jq -r '.approved // false')
+  CARRIED=$(echo "$APPROVAL" | jq -r '.carriedFrom // empty')
+  if [ "$APPROVED" = true ] && [ -n "$CARRIED" ] && [ "$CARRY_LOGGED" != true ]; then
+    say "approval carried over: approved head ${CARRIED} to ${HEAD_SHA}, the PR's own changes (patch-id ${PATCH_ID}) are identical"
+    CARRY_LOGGED=true
+  fi
 }
 approval_request() {
   python3 "$HERE/super-board-approval.py" --request --repo "$REPO" --pr "$PR" \
-    --head "$HEAD_SHA" --plan "$PLAN"
+    --head "$HEAD_SHA" --plan "$PLAN" ${PATCH_ID:+--patch "$PATCH_ID"}
 }
 HUMAN=$(echo "$PLAN" | jq -r '.human[] | "human-gate: \(.category) — \(.why)"')
 if [ -n "$HUMAN" ] || [ "$(echo "$PLAN" | jq '.needs_you | length')" -gt 0 ]; then
@@ -266,8 +278,6 @@ if [ -n "$HUMAN" ] && [ "$APPROVED" != true ]; then
   approval_request
   say "merge policy: waiting for a trusted human to approve this exact head"; exit 7
 fi
-
-git -C "$REPO_PATH" fetch origin "$HEAD_REF" "$BASE" --quiet
 
 git -C "$REPO_PATH" worktree add --detach "$SCRATCH" "$HEAD_SHA" --quiet 2>/dev/null || {
   say "could not create a scratch worktree for ${HEAD_REF}@${HEAD_SHA}"; exit 5; }

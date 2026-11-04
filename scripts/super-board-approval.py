@@ -24,6 +24,7 @@ _reader_spec.loader.exec_module(github_read)
 PREFIX = "approval-request: "
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 SCOPE = re.compile(r"[0-9a-f]{64}\Z")
+PATCH = re.compile(r"[0-9a-f]{40}\Z")
 BLOCK = re.compile(r"Reason tag:[^\n]*🙋|^approval-request:", re.M)
 DONE = re.compile(r"\s*done[.!]?\s*\Z", re.I)
 # GitHub's closing keywords: KEYWORD[:] #N or KEYWORD[:] owner/repo#N.
@@ -41,8 +42,25 @@ def scope_for(plan):
     return hashlib.sha256(json.dumps(relevant, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def request_for(repo, pr, head, scope):
-    return {"repo": repo.lower(), "pr": int(pr), "head": head, "scope": scope}
+def request_for(repo, pr, head, scope, patch=None):
+    # patch: `git patch-id --stable` of the PR's own changes (its diff against the merge base with the base branch).
+    request = {"repo": repo.lower(), "pr": int(pr), "head": head, "scope": scope}
+    if patch:
+        request["patch"] = patch
+    return request
+
+
+def covers(request, expected):
+    """Does an approved request still describe the code and steps being checked?
+
+    Same head: yes. A newer head: only when both carry the same patch-id, so merging the base into the
+    PR keeps the approval while any change to the PR's own diff (even a force-push) voids it.
+    """
+    rest = {k: v for k, v in expected.items() if k not in ("head", "patch")}
+    if any(request.get(k) != v for k, v in rest.items()):
+        return False
+    return request.get("head") == expected.get("head") or bool(
+        request.get("patch") and request.get("patch") == expected.get("patch"))
 
 
 def marker(request):
@@ -59,7 +77,8 @@ def parse_request(comment):
                 or not re.fullmatch(r"[^/\s]+/[^/\s]+", value["repo"])
                 or type(value.get("pr")) is not int or value["pr"] < 1
                 or not SHA.fullmatch(value.get("head", ""))
-                or not SCOPE.fullmatch(value.get("scope", ""))):
+                or not SCOPE.fullmatch(value.get("scope", ""))
+                or ("patch" in value and not PATCH.fullmatch(str(value["patch"])))):
             return None
         return value
     except (ValueError, TypeError):
@@ -120,7 +139,7 @@ def validate(comments, expected, permission, bots=frozenset()):
             return hold("ambiguous newest human request")
         request_comment = latest[0]
         request = parse_request(request_comment)
-        if request is None or any(request.get(k) != v for k, v in expected.items()):
+        if request is None or not covers(request, expected):
             return hold("the latest request does not cover the current code and human steps")
         if timestamp(request_comment.get("updated_at")) != latest_time:
             return hold("approval request was edited; post a fresh request")
@@ -140,6 +159,7 @@ def validate(comments, expected, permission, bots=frozenset()):
             if (author.get("type") == "User" and author.get("login")
                     and permission(author["login"]) in ("write", "maintain", "admin")):
                 return {"approved": True, "why": "trusted human confirmed the current request",
+                        "carriedFrom": request["head"] if request["head"] != expected["head"] else None,
                         "request": request, "requestId": request_comment.get("id"),
                         "approvalId": comment.get("id"), "approver": author["login"]}
         return hold("waiting for a trusted human to comment done on the current request")
@@ -217,7 +237,7 @@ class GitHub:
             issues |= body_links(body, self.repo)
         return head, issues
 
-    def check(self, number, head=None, scope=None, issue=None, bots=frozenset()):
+    def check(self, number, head=None, scope=None, issue=None, bots=frozenset(), patch=None):
         current_head, issues = self.pr(number)
         if issue is not None and issue not in issues:
             return {"approved": False, "why": "request issue is not linked to this PR"}
@@ -229,6 +249,8 @@ class GitHub:
         expected = {"repo": self.repo, "pr": number, "head": current_head}
         if scope is not None:
             expected["scope"] = scope
+        if patch:
+            expected["patch"] = patch
         return validate(comments, expected, self.permission, bots)
 
 
@@ -237,6 +259,7 @@ def main():
     ap.add_argument("--repo", required=True)
     ap.add_argument("--pr", type=int)
     ap.add_argument("--head")
+    ap.add_argument("--patch", help="git patch-id --stable of the PR's own changes; lets an approval survive a base merge")
     ap.add_argument("--plan", help="JSON plan from merge-policy")
     ap.add_argument("--request", action="store_true", help="print a pinned request; no network or writes")
     ap.add_argument("--deps", action="store_true", help="enrich the dependency graph on stdin")
@@ -248,7 +271,7 @@ def main():
     if args.request:
         if not args.pr or not args.head or not SHA.fullmatch(args.head) or not args.plan:
             ap.error("request requires --pr, full --head and --plan")
-        print(marker(request_for(args.repo, args.pr, args.head, scope_for(json.loads(args.plan)))))
+        print(marker(request_for(args.repo, args.pr, args.head, scope_for(json.loads(args.plan)), args.patch)))
         return
     if args.deps:
         graph = json.load(sys.stdin)
@@ -276,7 +299,7 @@ def main():
     if not args.pr or not args.head or not args.plan:
         ap.error("check requires --pr, --head and --plan")
     try:
-        result = GitHub(args.repo).check(args.pr, args.head, scope_for(json.loads(args.plan)), bots=bots)
+        result = GitHub(args.repo).check(args.pr, args.head, scope_for(json.loads(args.plan)), bots=bots, patch=args.patch)
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
         result = {"approved": False, "why": "approval evidence could not be verified"}
     print(json.dumps(result))

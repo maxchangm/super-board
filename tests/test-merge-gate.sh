@@ -395,7 +395,7 @@ RC=0; STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SH
 [ "$RC" -eq 0 ] || fail "current trusted approval must merge, got $RC"
 : > "$GH_LOG"
 # A later code version cannot reuse the same human's done.
-REQUEST=$(echo "$REQUEST" | jq '.head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"')
+REQUEST=$(echo "$REQUEST" | jq '.head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | del(.patch)')
 make_approval
 RC=0; STUB_OID="$SHA" STUB_META="$(meta money,needs-you:done src/x.ts)" gate --expect-head "$SHA" >/dev/null 2>&1 || RC=$?
 [ "$RC" -eq 7 ] || fail "old-head approval must hold, got $RC"
@@ -419,6 +419,52 @@ RC=0; STUB_META_AFTER="$(meta money src/x.ts 'needs-you: run a new command')" ST
 [ "$RC" -eq 7 ] || fail "changed human steps during verify must revoke approval, got $RC"
 grep -q '^pr merge' "$GH_LOG" && fail "stale approval after verification must not merge"
 unset STUB_APPROVAL STUB_COMMENTS STUB_VERIFIED
+teardown
+
+# 16c2 — D35: an approval survives the merge step bringing the PR up to date with the base, but only
+# while the PR's own changes (patch-id of its diff against the merge base) are identical.
+git_t() { git -C "$TMP" -c user.email=t@t -c user.name=t "$@"; }
+carry_setup() {
+  head_setup
+  git_t checkout -q feat; echo one > "$TMP/f.txt"; git_t add f.txt; git_t commit -q -m "own change"; git_t push -q origin feat
+  SHA=$(git_t rev-parse feat); git_t checkout -q staging
+  export STUB_APPROVAL=1 STUB_COMMENTS="$TMP/comments.json"; echo '[[]]' > "$STUB_COMMENTS"
+  OUT=$(STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SHA" 2>/dev/null || true)
+  REQUEST=$(echo "$OUT" | sed -n 's/^approval-request: //p')
+  echo "$REQUEST" | jq -e '.patch' >/dev/null || fail "a hold must pin the PR's patch-id in the request, got: $REQUEST"
+  make_approval
+  RC=0; STUB_OID="$SHA" STUB_META="$(meta money src/x.ts)" gate --expect-head "$SHA" >/dev/null 2>&1 || RC=$?
+  [ "$RC" -eq 0 ] || fail "the approved head itself must merge, got $RC"
+  : > "$GH_LOG"
+}
+# Base moves on; the merge step merges it into the PR (new head, same own changes).
+carry_setup
+git_t commit -q --allow-empty -m "dev moves" ; echo other > "$TMP/g.txt"; git_t add g.txt; git_t commit -q -m "dev file"; git_t push -q origin staging
+git_t checkout -q feat; git_t merge -q --no-edit staging; git_t push -q origin feat; NEW=$(git_t rev-parse feat); git_t checkout -q staging
+[ "$NEW" != "$SHA" ] || fail "setup must produce a new head"
+RC=0; OUT=$(STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" 2>&1) || RC=$?
+[ "$RC" -eq 0 ] || fail "a base merge with identical own changes must keep the approval, got $RC: $OUT"
+echo "$OUT" | grep -q "approval carried over: approved head $SHA to $NEW" || fail "the carry-over must be logged, got: $OUT"
+echo "$OUT" | grep -q '^approval-request:' && fail "a carried-over approval must not post a new request"
+grep -q -- "--match-head-commit $NEW" "$GH_LOG" || fail "the merge must pin the new head"
+: > "$GH_LOG"
+# The same change rebased onto the moved base (a force-push) is also unchanged.
+git_t checkout -q -B rebased "$SHA"; git_t rebase -q staging; git_t push -q -f origin rebased:feat; NEW2=$(git_t rev-parse rebased); git_t checkout -q staging
+RC=0; OUT=$(STUB_OID="$NEW2" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW2" 2>&1) || RC=$?
+[ "$RC" -eq 0 ] || fail "a rebase with identical own changes must keep the approval, got $RC: $OUT"
+teardown
+# RED: one changed line in the PR's own diff voids the approval and asks again.
+carry_setup
+git_t checkout -q feat; echo two > "$TMP/f.txt"; git_t commit -q -am "edit own change"; git_t push -q origin feat; NEW=$(git_t rev-parse feat); git_t checkout -q staging
+RC=0; OUT=$(STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" 2>&1) || RC=$?
+[ "$RC" -eq 7 ] || fail "a changed line in the PR's own diff must void the approval, got $RC: $OUT"
+echo "$OUT" | grep -q '^approval-request:' || fail "a changed PR must post a new request"
+grep -q '^pr merge' "$GH_LOG" && fail "a changed PR must not merge under the old approval"
+# RED: a force-push that rewrites the own change never inherits it.
+git_t checkout -q -B rewritten "$SHA"~1; echo three > "$TMP/f.txt"; git_t add f.txt; git_t commit -q -m "rewritten"; git_t push -q -f origin rewritten:feat; NEW=$(git_t rev-parse rewritten); git_t checkout -q staging
+RC=0; STUB_OID="$NEW" STUB_META="$(meta money src/x.ts)" gate --expect-head "$NEW" >/dev/null 2>&1 || RC=$?
+[ "$RC" -eq 7 ] || fail "a rewritten force-push must not inherit the approval, got $RC"
+unset STUB_APPROVAL STUB_COMMENTS
 teardown
 
 # 16d — head-bound approval also covers a declared human-only command; label
