@@ -91,6 +91,7 @@ CONFIG_JSON=$(cat "$CONFIG")
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 printf '%s\n' "$CONFIG_JSON" | python3 "$HERE/super-board-verification-ready.py" --config -
 export SB_REPO_PATH=$(echo "$CONFIG_JSON" | jq -r '.repo.path // "."')
+export SB_TRUSTED_REQUEST_BOTS=$(echo "$CONFIG_JSON" | jq -c '.approval.trusted_request_bots // []')
 python3 "$HERE/super-board-github-read.py" --check
 VARIANT=$(echo "$CONFIG_JSON" | jq -r '.variant // ""')
 # 0 or absent = unlimited. A wave is sized by the dependency graph, not a knob.

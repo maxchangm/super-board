@@ -123,6 +123,14 @@
   // and nothing lands. See references/run-workflow.md → "Mid-run permission prompts".
   "human_approves_merge": false,
 
+  // Human approval of a held merge. The request comment ("approval-request: {...}") must come from a repo
+  // collaborator with write access, or from a bot listed here. A GitHub App is never a collaborator
+  // (its permission reads "none"), so an app that posts the request must be named by login, exactly as the
+  // comments API returns it (e.g. "my-app[bot]"). Only the REQUEST is trusted this way: the `done` reply
+  // must still come from a User with write, maintain or admin access, and the head pin stays.
+  // Default: none listed, so only collaborators can post a trusted request.
+  "approval": { "trusted_request_bots": [] },
+
   // Who merges what (v2.6.0). Evaluated by super-board-merge-gate.sh (via
   // super-board-merge-policy.py) on every merge; `human_approves_merge: true`
   // still overrides it and makes the Reviewer stop before the gate.

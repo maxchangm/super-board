@@ -248,7 +248,7 @@ PLAN=$(python3 "$HERE/super-board-merge-policy.py" --config "$CONFIG" --meta "$M
 APPROVED=false
 approval_check() {
   APPROVAL=$(python3 "$HERE/super-board-approval.py" --repo "$REPO" --pr "$PR" \
-    --head "$HEAD_SHA" --plan "$PLAN") || APPROVAL='{"approved":false}'
+    --config "$CONFIG" --head "$HEAD_SHA" --plan "$PLAN") || APPROVAL='{"approved":false}'
   python3 "$GITHUB_READ" --check || exit $?
   APPROVED=$(echo "$APPROVAL" | jq -r '.approved // false')
 }
