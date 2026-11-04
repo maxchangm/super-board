@@ -193,6 +193,44 @@ class GitHubTests(unittest.TestCase):
         self.assertFalse(self.github.check(9, HEAD, REQUEST["scope"])["approved"])
 
 
+APP = "app-bot[bot]"
+
+
+class TrustedRequestBotTests(unittest.TestCase):
+    """A GitHub App is never a collaborator (permission "none"), so approval.trusted_request_bots names the apps whose REQUEST counts."""
+    def bot_evidence(self, bot=APP, done_login="owner", done_type="User"):
+        return [comment("Reason tag: 🙋 needs you\n" + approval.marker(REQUEST), 1, login=bot, actor="Bot"),
+                comment("done", 2, login=done_login, actor=done_type)]
+
+    def check(self, comments, bots, perms=None):
+        perms = perms or {"owner": "admin"}
+        return approval.validate(comments, REQUEST, lambda login: perms.get(login, "none"), approval.trusted_bots({"approval": {"trusted_request_bots": bots}}))
+
+    def test_listed_bot_request_and_human_done_approves(self):
+        self.assertTrue(self.check(self.bot_evidence(), [APP])["approved"])
+
+    def test_unlisted_bot_request_does_not_approve(self):
+        self.assertFalse(self.check(self.bot_evidence(), [])["approved"])
+        self.assertFalse(self.check(self.bot_evidence(bot="other[bot]"), [APP])["approved"])
+
+    def test_a_listed_bot_done_never_approves(self):
+        self.assertFalse(self.check(self.bot_evidence(done_login=APP, done_type="Bot"), [APP], {APP: "admin"})["approved"])
+
+    def test_a_user_with_the_bot_login_is_not_the_bot(self):
+        user_request = [comment("Reason tag: 🙋 needs you\n" + approval.marker(REQUEST), 1, login="owner2", actor="User"), comment("done", 2)]
+        self.assertFalse(self.check(user_request, ["owner2"])["approved"], "a listed login only counts for type Bot")
+
+    def test_done_from_a_user_without_write_access_does_not_approve(self):
+        self.assertFalse(self.check(self.bot_evidence(done_login="visitor"), [APP])["approved"])
+
+    def test_listed_bot_request_for_another_head_does_not_cover_the_code(self):
+        self.assertFalse(approval.validate(self.bot_evidence(), dict(REQUEST, head="b" * 40), lambda l: {"owner": "admin"}.get(l, "none"), frozenset([APP]))["approved"])
+
+    def test_config_key_is_optional_and_ignores_non_strings(self):
+        self.assertEqual(approval.trusted_bots({}), frozenset())
+        self.assertEqual(approval.trusted_bots({"approval": {"trusted_request_bots": [APP, 7, None]}}), frozenset([APP]))
+
+
 class DependencyIntegrationTests(unittest.TestCase):
     def test_live_planner_resume_requires_current_trusted_request(self):
         with tempfile.TemporaryDirectory() as td:

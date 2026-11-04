@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -74,7 +75,20 @@ def timestamp(value):
     return result
 
 
-def trusted_blocks(comments, permission):
+def trusted_bots(config):
+    """Logins the board config lists in approval.trusted_request_bots: bots whose request comment counts. Default none."""
+    bots = ((config or {}).get("approval") or {}).get("trusted_request_bots") or []
+    return frozenset(b for b in bots if isinstance(b, str))
+
+
+def can_request(user, permission, bots):
+    # A request pins the code and steps before a human replies `done`. A listed bot may post it; no other bot may.
+    if user.get("type") == "Bot" and user.get("login") in bots:
+        return True
+    return permission(user["login"]) in ("write", "maintain", "admin")
+
+
+def trusted_blocks(comments, permission, bots=frozenset()):
     result = []
     for block in comments:
         if not BLOCK.search(block.get("body") or ""):
@@ -82,12 +96,12 @@ def trusted_blocks(comments, permission):
         user = block.get("user") or {}
         if not user.get("login") or user.get("type") not in ("User", "Bot"):
             raise ValueError("requester identity could not be verified")
-        if permission(user["login"]) in ("write", "maintain", "admin"):
+        if can_request(user, permission, bots):
             result.append(block)
     return result
 
 
-def validate(comments, expected, permission):
+def validate(comments, expected, permission, bots=frozenset()):
     """Pure verdict; permission(login) is a current repository permission lookup."""
     def hold(why):
         return {"approved": False, "why": why}
@@ -95,7 +109,7 @@ def validate(comments, expected, permission):
     if not SHA.fullmatch(expected.get("head", "")):
         return hold("current PR head is unavailable")
     try:
-        blocks = trusted_blocks(comments, permission)
+        blocks = trusted_blocks(comments, permission, bots)
         if not blocks:
             return hold("no request from a trusted repository collaborator")
         # Any later human block supersedes the old request, including one with
@@ -111,7 +125,7 @@ def validate(comments, expected, permission):
         if timestamp(request_comment.get("updated_at")) != latest_time:
             return hold("approval request was edited; post a fresh request")
         requester = request_comment.get("user") or {}
-        if not requester.get("login") or permission(requester["login"]) not in ("write", "maintain", "admin"):
+        if not requester.get("login") or not can_request(requester, permission, bots):
             return hold("requester authority could not be verified")
         if not isinstance(request_comment.get("source"), int) or not request_comment.get("id"):
             return hold("request identity is missing")
@@ -203,7 +217,7 @@ class GitHub:
             issues |= body_links(body, self.repo)
         return head, issues
 
-    def check(self, number, head=None, scope=None, issue=None):
+    def check(self, number, head=None, scope=None, issue=None, bots=frozenset()):
         current_head, issues = self.pr(number)
         if issue is not None and issue not in issues:
             return {"approved": False, "why": "request issue is not linked to this PR"}
@@ -215,7 +229,7 @@ class GitHub:
         expected = {"repo": self.repo, "pr": number, "head": current_head}
         if scope is not None:
             expected["scope"] = scope
-        return validate(comments, expected, self.permission)
+        return validate(comments, expected, self.permission, bots)
 
 
 def main():
@@ -226,7 +240,11 @@ def main():
     ap.add_argument("--plan", help="JSON plan from merge-policy")
     ap.add_argument("--request", action="store_true", help="print a pinned request; no network or writes")
     ap.add_argument("--deps", action="store_true", help="enrich the dependency graph on stdin")
+    ap.add_argument("--config", help="board config JSON; approval.trusted_request_bots lists bots whose request counts")
     args = ap.parse_args()
+    bots = trusted_bots(json.load(open(args.config))) if args.config else frozenset()
+    # The wave planner reads the config once (it may be a pipe), so it hands the list down in the environment.
+    bots |= trusted_bots({"approval": {"trusted_request_bots": json.loads(os.environ.get("SB_TRUSTED_REQUEST_BOTS") or "[]")}})
     if args.request:
         if not args.pr or not args.head or not SHA.fullmatch(args.head) or not args.plan:
             ap.error("request requires --pr, full --head and --plan")
@@ -242,12 +260,12 @@ def main():
                 continue
             try:
                 comments = github.comments(entry["number"])
-                blocks = trusted_blocks(comments, github.permission)
+                blocks = trusted_blocks(comments, github.permission, bots)
                 latest = max(blocks, key=lambda c: timestamp(c.get("created_at"))) if blocks else {}
                 request = parse_request(latest)
                 if request is None or request["repo"] != github.repo:
                     continue
-                result = github.check(request["pr"], head=request["head"], issue=entry["number"])
+                result = github.check(request["pr"], head=request["head"], issue=entry["number"], bots=bots)
                 entry["needsYouDone"] = result["approved"]
                 entry["approvalRefresh"] = result.get("headChanged", False)
                 entry["approvalWhy"] = result["why"]
@@ -258,7 +276,7 @@ def main():
     if not args.pr or not args.head or not args.plan:
         ap.error("check requires --pr, --head and --plan")
     try:
-        result = GitHub(args.repo).check(args.pr, args.head, scope_for(json.loads(args.plan)))
+        result = GitHub(args.repo).check(args.pr, args.head, scope_for(json.loads(args.plan)), bots=bots)
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
         result = {"approved": False, "why": "approval evidence could not be verified"}
     print(json.dumps(result))
