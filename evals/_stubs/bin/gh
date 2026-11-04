@@ -83,7 +83,6 @@ case "${1:-} ${2:-}" in
       case "$(echo "$state_arg" | tr '[:upper:]' '[:lower:]')" in ""|merged|all|closed) state_arg="" ;; *) state_arg="none" ;; esac
       emit_list "$(filtered "$FX/prs-merged.json")"
     else emit "[$(cat "$FX/pr.json")]"; fi ;;
-  "pr diff"*) cat "$FX/diff.patch" ;;
   "pr checks"*) echo "no checks reported (eval stub)" ;;
   "pr merge"*) echo "merge recorded, not performed (eval stub)" ;;
   "issue list"*) if [ -f "$FX/issues.json" ]; then emit_list "$(filtered "$FX/issues.json")"; else emit_list '[]'; fi ;;
