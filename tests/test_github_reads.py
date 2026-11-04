@@ -255,6 +255,22 @@ dispatch_lane build 7
         self.assertIn(b're-take the metadata', r.stderr)
         self.assertFalse(self.halt.exists())
 
+    def test_metadata_read_right_after_a_push_waits_for_github_to_show_the_new_head(self):
+        # 2026-11-04, PR #727: a QA lane pushed 19 files, read `pr view --json files` at once and got the
+        # 28-file list of the old head; the 47-file diff then failed "diff file list incomplete" three times.
+        clone, head, _ = self.diff_repo({'a': 'one\n'})
+        meta = json.dumps({'files': [{'path': 'a', 'additions': 1, 'deletions': 0}], 'changedFiles': 1, 'additions': 1,
+                           'deletions': 0, 'labels': [], 'body': ''})
+        old = json.dumps({'headRefName': 'feat', 'headRefOid': '0' * 40})
+        new = json.dumps({'headRefName': 'feat', 'headRefOid': head})
+        self.env['READ_RESPONSES'] = json.dumps([{'out': meta}, {'out': old}, {'out': meta}, {'out': new}])
+        r = subprocess.run(['python3', str(HELPER), '--kind', 'metadata', '--', 'pr', 'view', '1', '--json',
+                            'files,labels,body,additions,deletions,changedFiles'],
+                           env=self.env, cwd=clone, text=True, capture_output=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('PR metadata older than the pushed branch head', r.stderr)
+        self.assertEqual(self.log.read_text(), '4', 'stale metadata must be read again, not accepted')
+
     def test_truncated_diff_is_not_complete_evidence(self):
         # Strict callers (merge gate) still halt on a diff that disagrees with its meta.
         clone, head, answer = self.diff_repo({'x.sql': 'one\n'})
