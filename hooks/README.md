@@ -127,6 +127,24 @@ Wired in this pack's `.claude/settings.json`. For EricOS, add to its `.claude/se
 
 Adapted from `gate-skill-evals.sh` in Eric Tech's ai-builder-starter-kit.
 
+## Guards as a plugin (Claude Code and Codex)
+
+`hooks/` is also the root of the hooks-only plugin `super-board-guards` (marketplace `super-board`). It wires
+`guard-delete-outside`, `guard-secrets` and `guard-key-literals` without touching `.claude/settings.json`:
+`hooks.json` for Claude Code (`${CLAUDE_PLUGIN_ROOT}`), `codex-hooks.json` for Codex, referenced by
+`.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Do not run it together with `install.sh` hooks in one
+session: both would run the same guards. The plugin has no skills. For a project that wants the `.claude/bin` scripts
+and workflows too, run `install.sh --no-hooks` and install the plugin.
+
+Codex runs a plugin hook only when its hash is trusted in `$CODEX_HOME/config.toml` (`[hooks.state."<key>"]
+trusted_hash`) or the run passes `--dangerously-bypass-hook-trust`. Codex has no `Read` or `Grep` tool and names its
+shell `Bash` and its edit tool `apply_patch`, so on Codex `guard-secrets` watches shell commands and
+`guard-key-literals` scans the added lines of an `apply_patch` and shell commands. Codex sets no `CLAUDE_PROJECT_DIR`:
+`guard-delete-outside` then takes the git root of the hook's `cwd` as the project.
+
+A `SessionStart` hook appends one line (`<time> super-board-guards host=<claude|codex> guards=...`) to the file named
+by `SUPER_BOARD_HOOK_LOG` when that variable is set, and does nothing otherwise.
+
 Tests: `tests/test-guard-hooks.sh` (all guards and the eval gate), `tests/test-cleanup-wt.sh`.
 
 ## Credit

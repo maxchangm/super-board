@@ -9,6 +9,13 @@
       "description": "Autonomous GitHub Project board runner: super-board, super-build, super-qa, super-review, super-collect, visual, git-sync, ui-refine-loop. After install, run /super-board onboard to add the guard hooks, .claude/bin scripts and workflows a plugin cannot ship.",
       "category": "development",
       "homepage": "https://github.com/EricTechPro/super-board"
+    },
+    {
+      "name": "super-board-guards",
+      "source": "./hooks",
+      "description": "Guard hooks only: guard-delete-outside, guard-secrets, guard-key-literals. Pair it with the .claude/bin scripts that install.sh --no-hooks adds.",
+      "category": "development",
+      "homepage": "https://github.com/EricTechPro/super-board"
     }
   ]
 }

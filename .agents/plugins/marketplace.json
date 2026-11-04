@@ -1,0 +1,21 @@
+{
+  "name": "super-board",
+  "interface": {
+    "displayName": "Super Board"
+  },
+  "plugins": [
+    {
+      "name": "super-board-guards",
+      "source": {
+        "source": "local",
+        "path": "./hooks"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": ["CODEX"]
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

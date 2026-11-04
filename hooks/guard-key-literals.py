@@ -4,6 +4,7 @@
 guard-secrets stops secrets getting OUT (reading dotenv files). This stops them
 getting IN: a key pasted into source, a config file, or a script. Wired on two events:
   PreToolUse  (Edit|MultiEdit|Write|NotebookEdit|Bash) -> deny before the key hits disk
+              (Codex: Bash and apply_patch, whose patch text is tool_input.command)
   PostToolUse (Edit|MultiEdit|Write|NotebookEdit)      -> catch what got through another
                                                           path and tell the agent to fix it
 
@@ -58,6 +59,8 @@ def visible_text(payload):
             return ti.get("new_source") or ""
         if tool == "Bash":  # heredocs, echo >> file, sed -i: the other tools never see these
             return ti.get("command") or ""
+        if tool == "apply_patch":  # Codex edits files through one patch in tool_input.command; only added lines count
+            return "\n".join(l[1:] for l in (ti.get("command") or "").splitlines() if l.startswith("+") and not l.startswith("+++"))
         return ""
     if event == "PostToolUse":
         path = ti.get("file_path") or ""

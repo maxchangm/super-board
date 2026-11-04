@@ -139,6 +139,120 @@ dd allow 'T=$(mktemp -d); rm -rf "$T/x"'           "unknowable value is allowed"
 dd allow 'echo "rm -rf /"'                         "quoted text is not a command"
 dd allow 'ls -la ~ && git status'                  "no deletion"
 
+# ---- Codex payloads (PreToolUse stdin from codex-rs/hooks: shell is "Bash", edits are "apply_patch") ----
+# Codex adds session_id, turn_id, model, permission_mode and tool_use_id, and sets no CLAUDE_PROJECT_DIR.
+cx() {  # $1 tool, $2 tool_input JSON, $3 cwd
+  jq -cn --arg t "$1" --argjson i "$2" --arg c "${3:-$PWD}" \
+    '{session_id:"s1", turn_id:"t1", transcript_path:null, cwd:$c, hook_event_name:"PreToolUse", model:"gpt-x", permission_mode:"bypassPermissions", tool_name:$t, tool_input:$i, tool_use_id:"call_1"}'
+}
+cxbash() { cx Bash "$(jq -cn --arg c "$1" '{command:$c}')" "${2:-$PWD}"; }
+cxpatch() { cx apply_patch "$(jq -cn --arg c "$1" '{command:$c}')" "${2:-$PWD}"; }
+export -n CLAUDE_PROJECT_DIR 2>/dev/null || true; unset CLAUDE_PROJECT_DIR
+expect deny  guard-secrets.py "$(cxbash "cat $D")"                          "codex: cat dotenv"
+expect deny  guard-secrets.py "$(cxbash "cat ${D}.local | head")"           "codex: cat dotenv.local piped"
+expect allow guard-secrets.py "$(cxbash "cat ${D}.example && npm test")"    "codex: dotenv example and npm test"
+expect allow guard-secrets.py "$(cxbash "git status")"                      "codex: ordinary command"
+expect deny  guard-key-literals.py "$(cxbash "echo 'K=$ANT' >> src/conf.sh")" "codex: key via Bash"
+PATCH_KEY=$(printf '*** Begin Patch\n*** Add File: src/conf.ts\n+const k = "%s";\n*** End Patch' "$ANT")
+PATCH_OK=$(printf '*** Begin Patch\n*** Update File: src/a.ts\n@@\n-old line\n+const k = process.env.ANTHROPIC_API_KEY;\n*** End Patch')
+PATCH_DEL=$(printf '*** Begin Patch\n*** Update File: src/a.ts\n@@\n-const k = "%s";\n+const k = process.env.K;\n*** End Patch' "$ANT")
+expect deny  guard-key-literals.py "$(cxpatch "$PATCH_KEY")"                "codex: key in apply_patch"
+expect allow guard-key-literals.py "$(cxpatch "$PATCH_OK")"                 "codex: normal apply_patch"
+expect allow guard-key-literals.py "$(cxpatch "$PATCH_DEL")"                "codex: apply_patch that removes a key"
+OUT=$(printf '%s' "$(cxpatch "$PATCH_KEY")" | python3 "$H/guard-key-literals.py")
+case "$OUT" in *"$ANT"*) fail "codex: the key value must never be echoed" ;; esac
+printf '%s' "$OUT" | grep -q 'line(s) 1' || fail "codex: reason should name line 1"
+# guard-delete-outside: no CLAUDE_PROJECT_DIR, so the project is the git root of cwd.
+# Under tests/, not a temp root, so a sibling of the repo is "outside" rather than "scratch".
+CXREPO=$(mktemp -d "$PWD/cxrepo.XXXXXX"); CXREPO=$(cd "$CXREPO" && pwd -P); trap 'rm -rf "$CXREPO"' EXIT; git -C "$CXREPO" init -q; mkdir -p "$CXREPO/sub" "$CXREPO/other"
+cxd() { expect "$1" guard-delete-outside.py "$(cxbash "$2" "${4:-$CXREPO}")" "codex: $3"; }
+cxd deny  'rm -rf ../elsewhere'            "delete beside the repo"
+cxd deny  'rm -rf /Users/someone/x'        "absolute path outside"
+cxd deny  'rm -rf ~'                       "home"
+cxd allow 'rm -rf build ./dist && npm test' "inside the repo"
+cxd allow 'rm -rf /tmp/cx-test-1'          "inside /tmp"
+cxd allow 'rm -rf ../other' "from a subdirectory, inside the git root" "$CXREPO/sub"
+cxd deny  'rm -rf ../../elsewhere' "from a subdirectory, outside the git root" "$CXREPO/sub"
+rm -rf "$CXREPO"
+
+# ---- plugin wiring: hooks/hooks.json (Claude) and hooks/codex-hooks.json (Codex) ----
+# hooks/ is the plugin root of super-board-guards. Run every registered command the way the host would.
+python3 - "$H" <<'PY' || fail "plugin manifests, hook files or marketplaces are inconsistent"
+import json, os, re, sys
+h = sys.argv[1]
+snippet = json.load(open(h + "/settings-snippet.json"))["hooks"]
+def guards(cfg):
+    return {m.group(1) for e in cfg.values() for g in e for x in g["hooks"] for m in [re.search(r"(guard-[a-z-]+)\.py", x["command"])] if m}
+claude = json.load(open(h + "/hooks.json"))["hooks"]
+codex = json.load(open(h + "/codex-hooks.json"))["hooks"]
+want = {"guard-delete-outside", "guard-secrets", "guard-key-literals"}
+assert guards(claude) == want, guards(claude)
+assert guards(codex) == want, guards(codex)
+assert want <= guards(snippet)
+for cfg in (claude, codex):
+    for e in cfg.values():
+        for g in e:
+            for x in g["hooks"]:
+                for m in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([\w.-]+)", x["command"]):
+                    assert os.path.isfile(h + "/" + m), m
+assert set(codex["PreToolUse"][0]["matcher"].split("|")) == {"Bash"}
+assert "apply_patch" in codex["PreToolUse"][1]["matcher"].split("|")
+for host, manifest, key in (("claude", ".claude-plugin", "hooks.json"), ("codex", ".codex-plugin", "codex-hooks.json")):
+    m = json.load(open(f"{h}/{manifest}/plugin.json"))
+    assert m["name"] == "super-board-guards" and "skills" not in m, host
+    assert os.path.isfile(h + "/" + m["hooks"][2:]) and m["hooks"] == "./" + key, host
+root = os.path.dirname(h)
+mk = json.load(open(root + "/.claude-plugin/marketplace.json"))
+assert any(p["name"] == "super-board-guards" and p["source"] == "./hooks" for p in mk["plugins"])
+cmk = json.load(open(root + "/.agents/plugins/marketplace.json"))
+assert cmk["plugins"][0]["name"] == "super-board-guards" and cmk["plugins"][0]["source"]["path"] == "./hooks"
+PY
+PASS=$((PASS + 1))
+export PROOT=$(cd "$H" && pwd -P)
+LISTPY='import json, re, sys
+cfg = json.load(open(sys.argv[1]))["hooks"][sys.argv[2]]
+for g in cfg:
+    if "matcher" not in g or sys.argv[3] in re.split(r"[|]", g["matcher"]):
+        for x in g["hooks"]:
+            print(x["command"])'
+run_registered() {  # $1 claude|codex, $2 event, $3 tool word, $4 payload -> stdout of every command registered for that tool
+  local f="$PROOT/hooks.json" cmd; [ "$1" = codex ] && f="$PROOT/codex-hooks.json"
+  python3 -c "$LISTPY" "$f" "$2" "$3" | while IFS= read -r cmd; do
+    printf '%s' "$4" | CLAUDE_PLUGIN_ROOT="$PROOT" sh -c "$cmd"
+  done
+}
+reg_expect() {  # $1 deny|allow, $2 host, $3 tool word, $4 payload, $5 label
+  local out; out=$(run_registered "$2" PreToolUse "$3" "$4")
+  case "$1" in
+    deny)  printf '%s' "$out" | grep -q '"permissionDecision": "deny"' || fail "$5: plugin hooks did not deny, got '$out'" ;;
+    allow) [ -z "$out" ] || fail "$5: plugin hooks blocked normal work: '$out'" ;;
+  esac
+  PASS=$((PASS + 1))
+}
+reg_expect deny  codex  Bash        "$(cxbash "cat $D")"                    "plugin codex: secrets"
+reg_expect deny  codex  Bash        "$(cxbash "rm -rf /Users/someone/x" "$PWD")" "plugin codex: delete outside"
+reg_expect deny  codex  apply_patch "$(cxpatch "$PATCH_KEY")"               "plugin codex: key literal in apply_patch"
+reg_expect deny  codex  Bash        "$(cxbash "echo 'K=$ANT' >> a.sh")"     "plugin codex: key literal via Bash"
+reg_expect allow codex  Bash        "$(cxbash "npm test && git status")"    "plugin codex: normal command"
+reg_expect allow codex  apply_patch "$(cxpatch "$PATCH_OK")"                "plugin codex: normal patch"
+reg_expect deny  claude Bash        "$(bash_cmd "cat $D")"                  "plugin claude: secrets"
+reg_expect deny  claude Read        "$(payload PreToolUse Read "{\"file_path\":\"/repo/$D\"}")" "plugin claude: Read dotenv"
+reg_expect deny  claude Write       "$(write "const k = \"$ANT\";")"        "plugin claude: key literal in Write"
+reg_expect deny  claude Bash        "$(bash_cmd "rm -rf /Users/someone/x" "$PWD")" "plugin claude: delete outside"
+reg_expect allow claude Bash        "$(bash_cmd "npm test && git status")"  "plugin claude: normal command"
+reg_expect allow claude Edit        "$(payload PreToolUse Edit '{"file_path":"/x/a.ts","new_string":"const a = 1;"}')" "plugin claude: normal edit"
+# SessionStart marker: one line per host when SUPER_BOARD_HOOK_LOG is set, nothing and exit 0 when it is not.
+LOGF=$(mktemp); : > "$LOGF"
+SUPER_BOARD_HOOK_LOG="$LOGF" run_registered claude SessionStart startup '{}' >/dev/null
+SUPER_BOARD_HOOK_LOG="$LOGF" run_registered codex SessionStart startup '{}' >/dev/null
+grep -q 'host=claude guards=guard-delete-outside,guard-secrets,guard-key-literals' "$LOGF" || fail "marker: claude line missing"
+grep -q 'host=codex guards=guard-delete-outside,guard-secrets,guard-key-literals' "$LOGF" || fail "marker: codex line missing"
+[ "$(wc -l < "$LOGF")" -eq 2 ] || fail "marker: expected two lines"
+rm -f "$LOGF"
+QUIET=$(env -u SUPER_BOARD_HOOK_LOG bash -c "$(declare -f run_registered); LISTPY=\$1; run_registered codex SessionStart startup '{}'" _ "$LISTPY" 2>&1)
+[ -z "$QUIET" ] || fail "marker: must stay silent when SUPER_BOARD_HOOK_LOG is unset, got '$QUIET'"
+PASS=$((PASS + 3))
+
 # ---- dev/gate-skill-evals (Stop; pack + EricOS only) -------------------------
 G=$(mktemp -d); G=$(cd "$G" && pwd -P)
 git -C "$G" init -q -b main; git -C "$G" config user.email t@t; git -C "$G" config user.name t
