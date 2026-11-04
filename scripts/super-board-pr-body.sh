@@ -79,7 +79,7 @@ GITHUB_READ="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/super-board-github-re
 # card, and the REST core bucket is separate from the GraphQL one the board
 # lives on. GH_REPO fills {owner}/{repo}; unset, gh uses the current checkout.
 export GH_REPO="${REPO:-${GH_REPO:-}}"; [ -n "$GH_REPO" ] || unset GH_REPO
-META=$(python3 "$GITHUB_READ" --kind body -- api "repos/{owner}/{repo}/pulls/$PR" --jq '{headRefOid: .head.sha, body: (.body // "")}' ) || exit $?
+META=$(python3 "$GITHUB_READ" --kind body -- api "repos/{owner}/{repo}/pulls/$PR" --jq '{headRefOid: .head.sha, headRefName: .head.ref, body: (.body // "")}' ) || exit $?
 NOW=$(printf '%s' "$META" | jq -r '.headRefOid // empty')
 if [ -n "$HEAD" ]; then
   # Short or full sha both work: the PR head must start with what you passed.
@@ -94,11 +94,12 @@ fi
 OLD_TMP=$(mktemp); NEW_TMP=$(mktemp)
 trap 'rm -f "$OLD_TMP" "$NEW_TMP"' EXIT
 printf '%s' "$META" | jq -r '.body // ""' > "$OLD_TMP"
+REF=$(printf '%s' "$META" | jq -r '.headRefName // empty')
 
 MODE_FLAG=replace; [ -n "$APPEND_FILE" ] && MODE_FLAG=append
-python3 - "$OLD_TMP" "$SRC" "$BLOCK" "$MODE_FLAG" "$BLOCKS" > "$NEW_TMP" <<'PY' || die "could not splice the block" 70
-import sys
-old_path, src_path, block, mode, order = sys.argv[1:6]
+python3 - "$OLD_TMP" "$SRC" "$BLOCK" "$MODE_FLAG" "$BLOCKS" "$REF" > "$NEW_TMP" <<'PY' || die "could not splice the block" 70
+import re, sys
+old_path, src_path, block, mode, order, ref = sys.argv[1:7]
 order = order.split()
 body = open(old_path, encoding="utf-8").read()
 content = open(src_path, encoding="utf-8").read().strip("\n")
@@ -153,6 +154,13 @@ else:
                 break
     if pos is None:
         out = (body.rstrip("\n") + "\n\n" if body.strip() else "") + new_block + "\n"
+# The approval helper links a PR to its issue by a closing keyword in the body, and a lane rewrite of the status
+# card can drop the one the Builder wrote. Keep one: the issue the old body closed, else the one the branch names.
+CLOSE = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:[\w.-]+/[\w.-]+)?#(\d+)\b", re.I)
+if not CLOSE.search(out):
+    m = CLOSE.search(body) or re.search(r"(?:^|/)issue-(\d+)(?:-|$)", ref)
+    if m:
+        out = out.rstrip("\n") + f"\n\nCloses #{m.group(1)}\n"
 sys.stdout.write(out)
 PY
 
