@@ -129,6 +129,8 @@ case "$1 $2" in
       if grep -q '^pr merge' "$GH_LOG"; then state="${STUB_STATE_AFTER:-OPEN}"; oid="${STUB_OID_AFTER:-$STUB_OID}"; fi
       jq -n --arg state "$state" --arg head "$oid" '{state:$state,headRefOid:$head,mergeCommit:(if $state=="MERGED" then {oid:$head} else null end)}'; exit 0 ;;
     esac
+    case "$*" in *baseRefName,headRefOid*)
+      echo '{"baseRefName":"staging","headRefOid":"0000000000000000000000000000000000000001"}'; exit 0 ;; esac
     case "$*" in *labels*)
       if [ -n "${STUB_META_AFTER:-}" ] && [ -f "$STUB_VERIFIED" ]; then printf '%s\n' "$STUB_META_AFTER"; exit 0; fi
       if [ -n "${STUB_META:-}" ]; then printf '%s\n' "$STUB_META"; else echo '{"files":[],"labels":[],"body":"","additions":0,"deletions":0,"changedFiles":0}'; fi
@@ -136,21 +138,6 @@ case "$1 $2" in
     oid="$STUB_OID"; grep -q '^pr merge' "$GH_LOG" && oid="${STUB_OID_AFTER:-$STUB_OID}"
     echo "feat $oid" ;;
   "pr merge") exit "${STUB_MERGE_RC:-0}" ;;
-  "pr diff")
-    [ "${STUB_DIFF_FAIL:-0}" = 0 ] || exit 1
-    if [ -n "${STUB_DIFF:-}" ]; then printf '%b' "$STUB_DIFF"; exit 0; fi
-    python3 - <<'DIFF'
-import json, os
-m = json.loads(os.environ.get('STUB_META') or '{"files":[],"additions":0,"deletions":0}')
-for i, f in enumerate(m.get('files', [])):
-    p = f['path']; print(f'diff --git a/{p} b/{p}\n--- a/{p}\n+++ b/{p}')
-    added = m.get('additions', 0) if i == 0 else 0
-    removed = m.get('deletions', 0) if i == 0 else 0
-    if added or removed:
-        print(f'@@ -1,{removed} +1,{added} @@')
-        print(''.join('-old\n' for _ in range(removed)) + ''.join('+new\n' for _ in range(added)), end='')
-DIFF
-    ;;
   "api graphql")
     jq -n --arg head "$STUB_OID" '[{data:{repository:{defaultBranchRef:{name:"main"},pullRequest:{headRefOid:$head,state:"OPEN",baseRefName:"main",body:"",closingIssuesReferences:{pageInfo:{hasNextPage:false,endCursor:null},nodes:[{number:42,repository:{nameWithOwner:"x/y"}}]}}}}}]' ;;
   "api --paginate")
@@ -167,6 +154,31 @@ DIFF
 esac
 STUB
   chmod +x "$TMP/bin/gh"
+  # The helper reads the diff with local git (`fetch --quiet`, `diff --no-color`); stub just those two.
+  REAL_GIT=$(command -v git)
+  cat > "$TMP/bin/git" <<STUB
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "fetch --quiet") exit 0 ;;
+  "diff --no-color")
+    [ "\${STUB_DIFF_FAIL:-0}" = 0 ] || exit 1
+    if [ -n "\${STUB_DIFF:-}" ]; then printf '%b' "\$STUB_DIFF"; exit 0; fi
+    exec python3 - <<'DIFF'
+import json, os
+m = json.loads(os.environ.get('STUB_META') or '{"files":[],"additions":0,"deletions":0}')
+for i, f in enumerate(m.get('files', [])):
+    p = f['path']; print(f'diff --git a/{p} b/{p}\\n--- a/{p}\\n+++ b/{p}')
+    added = m.get('additions', 0) if i == 0 else 0
+    removed = m.get('deletions', 0) if i == 0 else 0
+    if added or removed:
+        print(f'@@ -1,{removed} +1,{added} @@')
+        print(''.join('-old\\n' for _ in range(removed)) + ''.join('+new\\n' for _ in range(added)), end='')
+DIFF
+    ;;
+esac
+exec $REAL_GIT "\$@"
+STUB
+  chmod +x "$TMP/bin/git"
 }
 gate() { SB_GITHUB_RETRY_DELAY=0 SB_GITHUB_HALT_FILE="$TMP/halt.json" PATH="$TMP/bin:$PATH" "$GATE" --config "$TMP/c.json" --pr 1 --lock-timeout 6 "$@"; }
 
@@ -244,7 +256,7 @@ RC=0; STUB_OID="$SHA" STUB_MERGE_RC=1 gate --expect-head "$SHA" >/dev/null 2>&1 
 teardown
 
 # ── Merge policy and migrations (14-25). Same origin and stub; STUB_META is the
-#    `gh pr view --json labels,files,…` answer, STUB_DIFF the `gh pr diff` text.
+#    `gh pr view --json labels,files,…` answer, STUB_DIFF the local `git diff` text.
 cfgset() { jq "$1" "$TMP/c.json" > "$TMP/c2.json" && mv "$TMP/c2.json" "$TMP/c.json"; }
 meta() {  # $1 labels csv, $2 files csv, $3 body, $4 size
   jq -cn --arg l "$1" --arg f "$2" --arg b "${3:-}" --argjson n "${4:-1}" \
@@ -260,7 +272,7 @@ RC=0; SB_GITHUB_RETRY_DELAY=0 STUB_DIFF_FAIL=1 STUB_OID="$SHA" STUB_META="$(meta
 [ "$RC" -eq 79 ] || fail "failed required diff must halt run (79), got $RC"
 [ ! -f "$TMP/ran" ] || fail "no migration may run without policy evidence"
 grep -q '^pr merge' "$GH_LOG" && fail "no merge may run without policy evidence"
-[ "$(grep -c '^pr diff' "$GH_LOG")" -eq 3 ] || fail "exactly three failed read attempts"
+[ "$(grep -c 'baseRefName,headRefOid' "$GH_LOG")" -eq 3 ] || fail "exactly three failed read attempts"
 teardown
 
 # 14 — a money label: a human merges. Exit 7, the category is named, no merge.

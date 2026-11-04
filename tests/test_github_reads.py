@@ -201,8 +201,44 @@ dispatch_lane build 7
         self.assertIn('PR file list truncated', r.stderr)
         self.assertEqual(self.log.read_text(), '6')
 
+    def diff_repo(self, files):
+        """A clone of a bare origin: `main` holds `base`, branch `feat` changes `files` ({name: text}).
+
+        Returns (clone, head sha, the gh answer for `pr view --json baseRefName,headRefOid`).
+        """
+        git = lambda cwd, *a: subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *a], cwd=cwd,
+                                             check=True, capture_output=True, text=True).stdout.strip()
+        origin, clone = self.root / 'origin.git', self.root / 'clone'
+        git(self.root, 'init', '--bare', '-b', 'main', str(origin))
+        git(self.root, 'clone', '-q', str(origin), str(clone))
+        (clone / 'base').write_text('base\n')
+        git(clone, 'add', '.'); git(clone, 'commit', '-qm', 'base'); git(clone, 'push', '-q', 'origin', 'HEAD:main')
+        git(clone, 'checkout', '-qb', 'feat')
+        for name, text in files.items():
+            (clone / name).write_bytes(text.encode())
+        git(clone, 'add', '.'); git(clone, 'commit', '-qm', 'feat'); git(clone, 'push', '-q', 'origin', 'feat')
+        head = git(clone, 'rev-parse', 'HEAD')
+        return clone, head, {'out': json.dumps({'baseRefName': 'main', 'headRefOid': head})}
+
+    def read_diff(self, clone, answer, meta, *, strict=False):
+        metadata = self.root / 'meta.json'
+        metadata.write_text(json.dumps(meta))
+        self.env['READ_RESPONSES'] = json.dumps([answer])
+        if strict:
+            self.env['SB_GITHUB_READ_STRICT'] = '1'
+        return subprocess.run(['python3', str(HELPER), '--kind', 'diff', '--meta', str(metadata), '--', '1'],
+                              env=self.env, cwd=clone, capture_output=True)
+
+    def test_diff_comes_from_local_git_not_the_github_diff_media_type(self):
+        # 2026-11-04: a 316-file PR got HTTP 406 from the GitHub diff on every attempt and halted the QA lane.
+        clone, head, answer = self.diff_repo({f'f{i}': 'x\n' for i in range(320)})
+        r = self.read_diff(clone, answer, {'files': [{'path': f'f{i}'} for i in range(320)], 'additions': 320, 'deletions': 0})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.decode().count('diff --git '), 320)
+        self.assertEqual(self.log.read_text(), '1', 'one gh call: pr view for the base and head names')
+
     def test_diff_without_meta_fails_that_call_without_reading(self):
-        r = self.read([{'out': 'diff --git a/a b/a\n'}], 'diff', ['pr', 'diff', '1'])
+        r = self.read([{'out': 'diff --git a/a b/a\n'}], 'diff', ['1'])
         self.assertEqual(r.returncode, 64, r.stderr)
         self.assertIn('--kind metadata', r.stderr)
         self.assertIn('pr view <N> --json files,labels,body,additions,deletions,changedFiles', r.stderr)
@@ -212,24 +248,17 @@ dispatch_lane build 7
 
     def test_diff_that_disagrees_with_meta_fails_that_call(self):
         # 2026-10-25: lanes read metadata, pushed, then read the diff; the head race halted every lane.
-        metadata = self.root / 'meta.json'
-        metadata.write_text(json.dumps({'files':[{'path':'a'},{'path':'b'}], 'additions':1,'deletions':0}))
-        self.env['READ_RESPONSES'] = json.dumps([{'out':'diff --git a/a b/a\n@@ -0,0 +1 @@\n+one\n'}])
-        r = subprocess.run(['python3', str(HELPER), '--kind', 'diff', '--meta', str(metadata),
-                            '--', 'pr', 'diff', '1'], env=self.env, cwd=self.root, text=True, capture_output=True)
+        clone, head, answer = self.diff_repo({'a': 'one\n'})
+        r = self.read_diff(clone, answer, {'files':[{'path':'a'},{'path':'b'}], 'additions':1,'deletions':0})
         self.assertEqual(r.returncode, 64, r.stderr)
-        self.assertIn('diff file list incomplete', r.stderr)
-        self.assertIn('re-take the metadata', r.stderr)
+        self.assertIn(b'diff file list incomplete', r.stderr)
+        self.assertIn(b're-take the metadata', r.stderr)
         self.assertFalse(self.halt.exists())
 
     def test_truncated_diff_is_not_complete_evidence(self):
         # Strict callers (merge gate) still halt on a diff that disagrees with its meta.
-        self.env['SB_GITHUB_READ_STRICT'] = '1'
-        metadata = self.root / 'meta.json'
-        metadata.write_text(json.dumps({'files':[{'path':'x.sql'}], 'additions':2,'deletions':0}))
-        self.env['READ_RESPONSES'] = json.dumps([{'out':'diff --git a/x.sql b/x.sql\n@@ -0,0 +1,2 @@\n+one\n'}])
-        result = subprocess.run(['python3', str(HELPER), '--kind', 'diff', '--meta', str(metadata),
-                                 '--', 'pr', 'diff', '1'], env=self.env, cwd=self.root, capture_output=True)
+        clone, head, answer = self.diff_repo({'x.sql': 'one\n'})
+        result = self.read_diff(clone, answer, {'files':[{'path':'x.sql'}], 'additions':2,'deletions':0}, strict=True)
         self.assertEqual(result.returncode, 79)
         self.assertEqual(result.stdout, b'')
         self.assertEqual(self.log.read_text(), '3')
@@ -237,17 +266,13 @@ dispatch_lane build 7
     def test_diff_lines_with_line_like_characters_are_complete_evidence(self):
         # VT, FF, FS, NEL, U+2028/9 and a lone CR are content inside a changed line,
         # not line breaks; only \n ends a diff line (#62).
-        metadata = self.root / 'meta.json'
-        metadata.write_text(json.dumps({'files':[{'path':'dump.sql'}], 'additions':4,'deletions':1}))
-        diff = ('diff --git a/dump.sql b/dump.sql\nindex 1..2 100644\n--- a/dump.sql\n+++ b/dump.sql\n'
-                '@@ -1,3 +1,6 @@\n keep\n-old\x0bline\n+new\x0bvt\x0cff\n+sep\u2028\u2029para\x1c\x85\n'
-                '+lone\rcr\n+crlf\r\n keep2\n')
-        self.env['READ_RESPONSES'] = json.dumps([{'out': diff}])
-        result = subprocess.run(['python3', str(HELPER), '--kind', 'diff', '--meta', str(metadata),
-                                 '--', 'pr', 'diff', '1'], env=self.env, cwd=self.root, capture_output=True)
+        new = 'keep\nnew\x0bvt\x0cff\nsep\u2028\u2029para\x1c\x85\nlone\rcr\ncrlf\r\nkeep2\n'
+        clone, head, answer = self.diff_repo({'dump.sql': new})
+        result = self.read_diff(clone, answer, {'files':[{'path':'dump.sql'}], 'additions':6,'deletions':0})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.log.read_text(), '1')
-        self.assertEqual(result.stdout.decode(), diff)
+        want = subprocess.run(['git', 'diff', '--no-color', '--no-ext-diff', f'origin/main...{head}'], cwd=clone, capture_output=True).stdout
+        self.assertEqual(result.stdout, want)
 
     def test_corrected_query_can_resume_without_erasing_original_failure(self):
         bad = ['api', 'graphql', '-f', 'query=query { wrong }']

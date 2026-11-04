@@ -41,7 +41,8 @@ FORMS = {
     'body': 'pr view <N> --json body,headRefOid',
     'metadata': 'pr view <N> --json files,labels,body,additions,deletions,changedFiles',
     # A lane that reads metadata, pushes, then reads the diff races its own head.
-    'diff': ('pr diff <N> --repo <owner/repo>, with --meta <file> (before the --) from --kind metadata -- '
+    'diff': ('<N> [--repo <owner/repo>] (the diff is read from the local checkout with git, never from GitHub), '
+             'with --meta <file> (before the --) from --kind metadata -- '
              'pr view <N> --json files,labels,body,additions,deletions,changedFiles > <file> taken right before; '
              'if you pushed in between, re-take the metadata'),
     'state': 'issue view <N> --json state --jq .state',
@@ -55,6 +56,34 @@ FORMS = {
                'comments(last:8){ nodes{ body } } } } } }\' -F owner=<owner> -F repo=<repo> '
                '(see .claude/bin/super-board-deps.sh; not issue list)'),
 }
+
+
+def local_diff(args):
+    """The PR diff from the local checkout: `git diff origin/<base>...<head>`.
+
+    GitHub refuses the diff media type (HTTP 406) past 300 changed files, and the gh diff command
+    uses it. Only the base and head names come from GitHub (`pr view --json`, which has no cap).
+    """
+    number = next((a for a in args if re.fullmatch(r'[1-9][0-9]*', a)), None)
+    if number is None or any(a not in (number, '-R', '--repo') and not a.startswith('--repo=') and not re.fullmatch(r'[\w.-]+/[\w.-]+', a) for a in args):
+        raise ValueError(f'--kind diff takes the PR number and optional --repo, no gh command. Valid form: --kind diff -- {FORMS["diff"]}')
+    repo = [a for a in args if a != number]
+    run = lambda cmd: subprocess.run(cmd, capture_output=True, timeout=120)
+    view = run(['gh', 'pr', 'view', number, *repo, '--json', 'baseRefName,headRefOid'])
+    if view.returncode:
+        return view
+    try:
+        pr = json.loads(view.stdout)
+        base, head = pr['baseRefName'], pr['headRefOid']
+        require(isinstance(base, str) and base and re.fullmatch(r'[0-9a-f]{40}', head) is not None, 'PR base or head missing')
+    except (ValueError, KeyError, TypeError) as error:
+        view.stderr += f'PR base/head unreadable: {error}'.encode()
+        view.returncode = 1
+        return view
+    fetch = run(['git', 'fetch', '--quiet', 'origin', base, head])
+    if fetch.returncode:
+        return fetch
+    return run(['git', 'diff', '--no-color', '--no-ext-diff', f'origin/{base}...{head}'])
 
 
 def halt_path():
@@ -330,7 +359,7 @@ def fill_files(args, text, recovering):
 
 
 def read(args, kind='json', meta=None, recovering=False):
-    if not read_only(args):
+    if kind != 'diff' and not read_only(args):
         raise ValueError('retry helper accepts read-only GitHub commands only')
     # gh refuses this pair locally on every attempt; retrying it would halt the run for the caller's typo.
     if '--slurp' in args and any(a in ('--jq', '-q', '--template', '-t') or a.startswith(('--jq=', '--template=')) for a in args):
@@ -340,7 +369,7 @@ def read(args, kind='json', meta=None, recovering=False):
     # fail this call (exit 64), never retry or halt.
     if kind == 'diff' and not isinstance(meta, dict):
         raise ValueError(f'--kind diff needs --meta; this call failed, the run continues. Valid form: first '
-                         f'--kind metadata -- {FORMS["metadata"]} > <file>, then --kind diff --meta <file> -- pr diff <N>')
+                         f'--kind metadata -- {FORMS["metadata"]} > <file>, then --kind diff --meta <file> -- <N>')
     if not recovering:
         check_halt()
     operation = {'args': args, 'kind': kind, 'meta': meta}
@@ -351,7 +380,7 @@ def read(args, kind='json', meta=None, recovering=False):
         if not recovering:
             check_halt()
         try:
-            result = subprocess.run(['gh', *args], capture_output=True, timeout=30)
+            result = local_diff(args) if kind == 'diff' else subprocess.run(['gh', *args], capture_output=True, timeout=30)
             # Decode by hand: text=True turns a lone \r inside a diff line into \n.
             result.stdout = result.stdout.decode('utf-8', 'replace')
             result.stderr = result.stderr.decode('utf-8', 'replace')

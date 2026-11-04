@@ -328,7 +328,7 @@ to your project's `.claude/settings.json` → `permissions.allow` so waves
 don't stall on prompts:
 
     "Bash(gh issue view:*)", "Bash(gh issue edit:*)", "Bash(gh issue comment:*)",
-    "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr checks:*)", "Bash(gh pr comment:*)",
+    "Bash(gh pr view:*)", "Bash(gh pr checks:*)", "Bash(gh pr comment:*)",
     "Bash(gh pr create:*)", "Bash(gh pr ready:*)", "Bash(gh project item-edit:*)",
     "Bash(gh project item-list:*)", "Bash(gh api:*)", "Bash(git worktree:*)",
     "Bash(.claude/bin/super-board-card.sh:*)",
