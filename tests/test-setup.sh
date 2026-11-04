@@ -318,6 +318,31 @@ TXT=$(python3 "$SETUP" check --root "$WORK/bare" --text || true)
 echo "$TXT" | grep -q "✗ .*b.json.*gemini" || fail "text report must name the bad host: $TXT"
 python3 "$SETUP" fix --root "$WORK/bare" --no-helpers >/dev/null || true
 q '.host == "gemini"' "$H/b.json" || fail "fix must not guess over a set host: $(cat "$H/b.json")"
+# A non-Claude host keeps merge_policy.default unset (merges by hand, #47); claude gets "auto".
+for h in codex opencode; do
+  printf '{"host":"%s"}' "$h" > "$H/b.json"
+  python3 "$SETUP" fix --root "$WORK/bare" --no-helpers >/dev/null || true
+  q '.columns != null and (.merge_policy.default // null) == null' "$H/b.json" || fail "fix must migrate but not turn auto-merge on for host $h: $(cat "$H/b.json")"
+done
+rm "$H/b.json"; echo '{}' > "$H/b.json"
+python3 "$SETUP" fix --root "$WORK/bare" --no-helpers --host codex >&2 || true
+q '.host == "codex" and (.merge_policy.default // null) == null' "$H/b.json" \
+  || fail "fix filling host codex must not turn auto-merge on: $(cat "$H/b.json")"
+printf '{"host":"claude"}' > "$H/b.json"
+python3 "$SETUP" fix --root "$WORK/bare" --no-helpers >/dev/null || true
+q '.merge_policy.default == "auto"' "$H/b.json" || fail "host claude keeps the auto migration: $(cat "$H/b.json")"
 rm "$H/b.json"
 
-echo "PASS: test-setup.sh (13 scenarios)"
+# 14 — two backup-needing fixes back to back (same minute) each keep their own backup and
+#      both migrate; the per-minute stamp used to crash the second with EEXIST.
+R="$WORK/twice"; C="$R/.claude/super-board/configs"; mkdir -p "$C"; git -C "$R" init -q
+for i in 1 2; do
+  printf '{"host":"codex"}' > "$C/b.json"
+  OUT=$(python3 "$SETUP" fix --root "$R" --no-helpers || true)
+  echo "$OUT" | q '.error == null' || fail "fix #$i in the same minute must not fail: $OUT"
+  q '.columns != null' "$C/b.json" || fail "fix #$i must migrate the config: $(cat "$C/b.json")"
+done
+N=$(find "$R/.claude/super-board/backup" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+[ "$N" = 2 ] || fail "two fixes must keep two distinct backups, got $N"
+
+echo "PASS: test-setup.sh (14 scenarios)"
