@@ -334,9 +334,9 @@ dispatch_lane() {
     return 0
   fi
   case "$lane" in
-    build)  prompt="Run super-build on issue #${issue} for super-board run. Read .claude/skills/super-board/references/run.md → Builder lifecycle. Config: ${CONFIG_PATH}." ;;
-    qa)     prompt="Run super-qa on issue #${issue} for super-board run. Read .claude/skills/super-board/references/run.md → Tester lifecycle. Config: ${CONFIG_PATH}." ;;
-    review) prompt="Run super-review on issue #${issue} for super-board run. Read .claude/skills/super-board/references/run.md → Reviewer lifecycle. Config: ${CONFIG_PATH}." ;;
+    build)  prompt="Run super-build on issue #${issue} for super-board run. Read your lane rules with bash .claude/bin/super-board-role-rules.sh builder, not run.md whole; follow the Builder lifecycle. Config: ${CONFIG_PATH}." ;;
+    qa)     prompt="Run super-qa on issue #${issue} for super-board run. Read your lane rules with bash .claude/bin/super-board-role-rules.sh tester, not run.md whole; follow the Tester lifecycle. Config: ${CONFIG_PATH}." ;;
+    review) prompt="Run super-review on issue #${issue} for super-board run. Read your lane rules with bash .claude/bin/super-board-role-rules.sh reviewer, not run.md whole; follow the Reviewer lifecycle. Config: ${CONFIG_PATH}." ;;
     *) log "unknown lane: $lane"; return 1 ;;
   esac
   prompt="First operation: run .claude/bin/super-board-skills-ready.py --root '$PWD' --host claude --cards - --lane '$lane' --hydrate with $card as stdin. Halt on exit 10 before worktree creation or lifecycle writes; preserve claims and approval evidence. Load resolved paths and only declared fallbacks; recheck conditionals with --require before activation. $prompt"

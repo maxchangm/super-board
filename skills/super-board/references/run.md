@@ -2,7 +2,13 @@
 
 **Scope:** the lane lifecycles (Builder, Tester, Reviewer) that both backends use, and the legacy `claude-p` runner (`worker_backend: "claude-p"`). The default in-session wave loop is in `run-workflow.md`.
 
-**Where the legacy runner runs:** headless. Spawned as a `nohup`-backgrounded process; the current Claude session exits immediately after dispatch. The runner script (`scripts/super-board-run.sh`) is a pure shell while-loop that dispatches one `claude -p` worker per lane and never holds Claude session state. Each `claude -p` worker is its own short-lived headless context — load this file at the start of every lane.
+**Where the legacy runner runs:** headless. Spawned as a `nohup`-backgrounded process; the current Claude session exits immediately after dispatch. The runner script (`scripts/super-board-run.sh`) is a pure shell while-loop that dispatches one `claude -p` worker per lane and never holds Claude session state. Each `claude -p` worker is its own short-lived headless context.
+
+**Lane workers do not read this file whole.** At the start of every lane, run
+`bash .claude/bin/super-board-role-rules.sh <builder|tester|reviewer>`: it prints, in file order, every
+section that role follows, from the role map in that script. Open another section here only when
+those rules point at it. A heading renamed here must be renamed in the map too; the script exits 3
+naming any mapped heading this file no longer has.
 
 ## Required GitHub reads can pause a run
 

@@ -7,6 +7,9 @@ description: Reviewer lane of the super-board pipeline and standalone PR/branch 
 **For a board worker, before writes or worktree creation:** follow [skill readiness](../super-board/references/skills-readiness.md).
 Resolve this lane for the actual host, load the report's files/fallbacks, halt
 on missing requirements and recheck each conditional helper before use.
+Read the lane rules in run.md with `bash .claude/bin/super-board-role-rules.sh reviewer`, not run.md
+whole; it prints every run.md section the Reviewer follows, the Merge protocol included. Open another
+run.md section only when those rules point at it.
 
 # Super Review — PR/code readiness reviewer
 
@@ -302,7 +305,7 @@ When invoked by super-board (env `SUPER_BOARD_RUN=1` or invocation contains "sup
 - **`qa` card:** review the QA report quality and any test diff; there is no product-code diff.
 
 ### Lifecycle (Reviewer)
-See `.claude/skills/super-board/references/run.md` → Reviewer. Summary of the sub-steps:
+The full steps are run.md → Reviewer, in the `super-board-role-rules.sh reviewer` output. Summary of the sub-steps:
 
 1. Worktree from current state of `issue-<N>-<slug>`.
 2. **Gate 1 — thread scan.** Read threads and replies. [PR author notes](../super-board/references/pr-author-notes.md)

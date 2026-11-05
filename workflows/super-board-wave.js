@@ -147,7 +147,7 @@ const lanePrompt = (lane, card) => [
   SKILLS_CHECK([card], lane),
   READ_FAILURE,
   `Run ${LANE[lane].skill} on issue #${card.number} ("${card.title}") for a super-board workflow wave.`,
-  `Read .claude/skills/super-board/references/run.md → "${LANE[lane].section}" lifecycle and follow it EXACTLY:`,
+  `Read your lane rules with bash .claude/bin/super-board-role-rules.sh ${LANE[lane].section.toLowerCase()} (every run.md section the ${LANE[lane].section} follows; do not read run.md whole, open another run.md section only when those rules point at it). Follow the "${LANE[lane].section}" lifecycle EXACTLY:`,
   `create your own worktree under .claude/worktrees/, work on the issue branch, post the required PR/issue comments,`,
   `move the project card yourself, clean up the worktree on exit. Config: ${input.configPath}.`,
   BOARD_IO(),
