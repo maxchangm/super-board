@@ -183,6 +183,15 @@
                   "paths": [],
                   "keywords": ["drop table", "drop column", "truncate table", "rename column", "drop schema"] }
     },
+    // Optional: skip the human for a PR held ONLY by an always_human category named `blast` (label blast:red) and/or the size cap.
+    // The gate merges it when ALL hold: no other hold or human step (another category, migrations needs-you);
+    // no changed path (either side of a rename) matches exclude_globs; the PR closes only issues that are one of
+    // `roots` or a sub-issue of one at any depth (GitHub parent link); the Review passed this exact head
+    // (--expect-head); and the newest "**Reviewer's recommendation:** Merge." comment, from a bot in
+    // approval.trusted_request_bots, is not older than the head commit. It then posts one line naming `label`.
+    // Any doubt keeps the hold. Absent → red always waits for a human. Evaluated by super-board-merge-policy.py
+    // (paths) and super-board-red-auto-merge.py (GitHub facts).
+    "red_auto_merge": { "roots": [543], "exclude_globs": ["src/lib/auth/**", "src/proxy.ts"], "label": "D40" },
     // true only when the user explicitly chose auto-merge onto a
     // production-detected base in onboard. run.md's production-merge guard
     // refuses to start otherwise.

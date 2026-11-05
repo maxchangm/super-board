@@ -14,7 +14,8 @@ Stdout, one JSON object:
       "migrations": [ "supabase/migrations/2026_add_col.sql" ],
       "run":        [ {"env": "staging", "cmd": "npm run db:migrate:staging"} ],
       "needs_you":  [ "npm run db:migrate:live   # live: not in allowed_envs" ],
-      "done":       false }
+      "done":       false,
+      "red_auto_merge": { "eligible": false, "why": "..." } }
 
 `human` non-empty → the gate exits 7 (a human merges). `needs_you` non-empty →
 exit 8 unless the gate verifies a head-bound approval. `done` stays false for
@@ -41,6 +42,9 @@ Rules, from references/config-schema.json → merge_policy / migrations:
   deploy pipeline applies it: nothing to run). target_env not in allowed_envs, or
   allowed with no command → needs you. migrations.human_steps (any migration PR)
   and `needs-you: <command>` lines in the PR body, bare or inside the status alert (any PR) → needs you.
+- merge_policy.red_auto_merge {roots, exclude_globs, label}: `red_auto_merge.eligible` is true when the ONLY hold is
+  the `blast` category (label blast:red) and/or the size cap, no human step is pending, and no changed path, on either side of a rename,
+  matches exclude_globs. The gate then asks super-board-red-auto-merge.py for the GitHub half before it skips the human.
 Globs: `**/` any directories (incl. none), `**` anything, `*` within one path
 segment, `?` one character.
 """
@@ -108,6 +112,27 @@ def matches(path: str, globs) -> str | None:
         if glob_re(g).match(path):
             return g
     return None
+
+
+def red_auto_merge(rule, human, needs, paths, diff) -> dict:
+    """merge_policy.red_auto_merge: may the gate skip the human for a PR held ONLY by `blast` and/or `size`?
+
+    Pure half of the rule: every hold is the blast label or the size cap, no human step is pending, and no changed path
+    (either side of a rename, read from the diff headers) matches exclude_globs. The gate adds the GitHub half
+    (super-board-red-auto-merge.py: issue under rule.roots, Review recommends Merge on this head).
+    """
+    if not isinstance(rule, dict) or not rule.get("roots"):
+        return {"eligible": False, "why": "red_auto_merge is not configured"}
+    if not human or any(h["category"] not in ("blast", "size") for h in human):
+        return {"eligible": False, "why": "a hold other than the blast radius or the size limit applies"}
+    if needs:
+        return {"eligible": False, "why": "a human step is pending"}
+    old = re.findall(r"^diff --git a/(\S+) b/\S+$|^rename from (.+)$", diff, re.M)
+    touched = set(paths) | {a or b for a, b in old}
+    hit = next((p for p in sorted(touched) if matches(p, rule.get("exclude_globs"))), None)
+    if hit:
+        return {"eligible": False, "why": f"{hit} is in the excluded set"}
+    return {"eligible": True, "why": "held only by the blast radius and/or the size limit; no excluded path changed"}
 
 
 def main() -> int:
@@ -201,7 +226,8 @@ def main() -> int:
             needs.append(m.group(1).strip("`"))
 
     print(json.dumps({"human": human, "migrations": mig_files, "run": run,
-                      "needs_you": needs, "done": False}))
+                      "needs_you": needs, "done": False,
+                      "red_auto_merge": red_auto_merge(policy.get("red_auto_merge"), human, needs, paths, diff)}))
     return 0
 
 

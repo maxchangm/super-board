@@ -278,6 +278,30 @@ HUMAN=$(echo "$PLAN" | jq -r '.human[] | "human-gate: \(.category) — \(.why)"'
 if [ -n "$HUMAN" ] || [ "$(echo "$PLAN" | jq '.needs_you | length')" -gt 0 ]; then
   approval_check
 fi
+
+# merge_policy.red_auto_merge: a PR held ONLY by the blast radius and/or the size limit, with no excluded path changed (the policy's half), skips the
+# human when the GitHub half also holds (issue under a configured root, the Review's newest recommendation on this head is
+# Merge). An approval already on file wins. Any doubt leaves HUMAN set, so today's hold applies.
+RED_AUTO=false; RED_LINE=""
+if [ -n "$HUMAN" ] && [ "$APPROVED" != true ] && [ "$(echo "$PLAN" | jq -r '.red_auto_merge.eligible // false')" = true ]; then
+  HEAD_TIME=$(git -C "$REPO_PATH" show -s --format=%cI "$HEAD_SHA" 2>/dev/null) || HEAD_TIME=
+  RED=$(python3 "$HERE/super-board-red-auto-merge.py" --config "$CONFIG" --repo "$REPO" --pr "$PR" --head "$HEAD_SHA" \
+          --expect-head "$EXPECT_HEAD" --head-time "$HEAD_TIME") || { rc=$?; [ "$rc" -ne 79 ] || exit 79; RED='{"qualifies":false,"why":"helper failed"}'; }
+  python3 "$GITHUB_READ" --check || exit $?
+  RED_LABEL=$(echo "$RED" | jq -r '.label // "red_auto_merge"')
+  if [ "$(echo "$RED" | jq -r '.qualifies // false')" = true ]; then
+    RED_AUTO=true; HUMAN=""
+    RED_LINE="**Merged:** ${RED_LABEL} merged this PR without Max (held only by the blast radius and/or the size limit): $(echo "$RED" | jq -r .why). <!-- sb-red-auto-merge -->"
+    say "red auto-merge (${RED_LABEL}): $(echo "$RED" | jq -r .why)"
+  else
+    say "red auto-merge not applied: $(echo "$RED" | jq -r '.why // "unknown"')"
+  fi
+fi
+announce_red_auto() {
+  [ "$RED_AUTO" = true ] || return 0
+  python3 "$GITHUB_READ" --check >/dev/null 2>&1 && gh pr comment "$PR" ${REPO:+--repo "$REPO"} --body "$RED_LINE" >/dev/null 2>&1 \
+    || say "could not post the red auto-merge line"
+}
 if [ -n "$HUMAN" ] && [ "$APPROVED" != true ]; then
   echo "$HUMAN"
   echo "$PLAN" | jq -r '.needs_you[] | "needs-you: " + .'
@@ -367,6 +391,7 @@ if gh pr merge "$PR" ${REPO:+--repo "$REPO"} --squash --delete-branch \
      ${SUBJECT:+--subject "$SUBJECT"} ${MSG_FILE:+--body-file "$MSG_FILE"} \
      --match-head-commit "$HEAD_SHA" 2>&1 | tail -3 >&2; then
   say "merged ${HEAD_SHA}"
+  announce_red_auto
   # Post-merge tidy-up: drop the merged PR's own local branch and its worktree, nothing
   # else (#479). Optional (only when the cleanup-wt hook is installed), local-only, and it
   # can never fail the merge that already happened.
@@ -378,6 +403,7 @@ fi
 STATE=$(pr_state) || exit $?
 if [ "$(echo "$STATE" | jq -r .state)" = MERGED ]; then
   say "merge response was lost; GitHub confirms the merge commit"
+  announce_red_auto
   exit 0
 fi
 NOW_SHA=$(echo "$STATE" | jq -r .headRefOid)

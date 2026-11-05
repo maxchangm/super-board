@@ -138,7 +138,13 @@ case "$1 $2" in
     oid="$STUB_OID"; grep -q '^pr merge' "$GH_LOG" && oid="${STUB_OID_AFTER:-$STUB_OID}"
     echo "feat $oid" ;;
   "pr merge") exit "${STUB_MERGE_RC:-0}" ;;
+  "pr comment") exit 0 ;;
   "api graphql")
+    case "$*" in *"issue(number:"*)  # red_auto_merge parent walk; STUB_PARENTS="42=563 563=543"
+      n=$(echo "$*" | sed -n 's/.*issue(number:\([0-9]*\)).*/\1/p'); p=""
+      for kv in ${STUB_PARENTS:-}; do [ "${kv%%=*}" = "$n" ] && p="${kv#*=}"; done
+      jq -n --arg p "$p" '{data:{repository:{issue:(if $p=="" then {parent:null} else {parent:{number:($p|tonumber)}} end)}}}'; exit 0 ;;
+    esac
     jq -n --arg head "$STUB_OID" '[{data:{repository:{defaultBranchRef:{name:"main"},pullRequest:{headRefOid:$head,state:"OPEN",baseRefName:"main",body:"",closingIssuesReferences:{pageInfo:{hasNextPage:false,endCursor:null},nodes:[{number:42,repository:{nameWithOwner:"x/y"}}]}}}}}]' ;;
   "api --paginate")
     [ "${STUB_APPROVAL:-0}" = 1 ] || { echo '[[]]'; exit 0; }
@@ -631,5 +637,104 @@ RC=0; STUB_OID="$SHA" "$GATE" --config "$TMP/failing.json" --pr 1 --expect-head 
 [ "$RC" -eq 2 ] || fail "failed configured project check must exit 2, got $RC"
 grep -q '^pr merge' "$GH_LOG" && fail "failed check must not merge"
 teardown
+
+# 26 — merge_policy.red_auto_merge (D40). A PR held ONLY by blast:red merges without a human when its issue sits under a
+#      configured root, no excluded path changed and the newest trusted Review recommendation on this head is Merge.
+red_setup() {
+  head_setup
+  cfgset '.merge_policy = {default: "auto", auto_max_lines: 400,
+    always_human: {blast: {labels: ["blast:red"]}, money: {labels: ["money"]}, auth: {labels: ["auth"], paths: ["**/auth/**"]}},
+    red_auto_merge: {roots: [543], label: "D40", exclude_globs: ["src/lib/auth/**", "src/proxy.ts", "**/permissions/**"]}}
+    | .approval = {trusted_request_bots: ["robot[bot]"]}'
+  export STUB_APPROVAL=1 STUB_COMMENTS="$TMP/comments.json" STUB_PARENTS="42=563 563=543"
+  rec Merge 2099-01-01T00:00:00Z
+}
+rec() {  # $1 verdict text, $2 created_at, $3 login, $4 type: the comment on issue 42 (the PR's closing issue)
+  jq -n --arg t "$1" --arg at "$2" --arg u "${3:-robot[bot]}" --arg ty "${4:-Bot}" \
+    '[[{id:9, body:("**Review:** ok\n\n**Reviewer'"'"'s recommendation:** " + $t + ".\n**Why:** x"), created_at:$at, updated_at:$at, user:{login:$u, type:$ty}}]]' > "$STUB_COMMENTS"
+}
+red_gate() { RC=0; OUT=$(STUB_OID="$SHA" STUB_META="${META_OVERRIDE:-$(meta blast:red src/lib/tenancy/x.ts "" 10)}" gate --expect-head "$SHA" 2>&1) || RC=$?; }
+red_end() { unset STUB_APPROVAL STUB_COMMENTS STUB_PARENTS META_OVERRIDE; teardown; }
+
+# 26a — a #543 descendant (two levels down), red only, no excluded file, Review says Merge: merged, one line posted.
+red_setup; red_gate
+[ "$RC" -eq 0 ] || fail "a qualifying red PR must merge, got $RC: $OUT"
+grep -q -- "--match-head-commit $SHA" "$GH_LOG" || fail "the qualifying red PR must merge pinned to the reviewed head"
+[ "$(grep -c '^pr comment' "$GH_LOG")" -eq 1 ] || fail "exactly one line must be posted, got: $(cat "$GH_LOG")"
+grep '^pr comment' "$GH_LOG" | grep -q "D40 merged this PR without Max" || fail "the line must name D40 and say it merged without Max"
+grep '^pr comment' "$GH_LOG" | grep -q "#42" || fail "the line must say why: the issue under the map"
+echo "$OUT" | grep -q '^approval-request:' && fail "a qualifying red PR must not ask for approval"
+red_end
+
+# 26b — the same PR touching an excluded (auth gate) file is held for Max, and so is a rename out of one.
+for files in src/lib/auth/session.ts src/proxy.ts src/lib/x/permissions/rules.ts; do
+  red_setup; META_OVERRIDE="$(meta blast:red "$files" "" 10)"; red_gate
+  [ "$RC" -eq 7 ] || fail "$files must stay held for Max, got $RC: $OUT"
+  grep -q '^pr merge' "$GH_LOG" && fail "$files must not merge"
+  echo "$OUT" | grep -q '^approval-request:' || fail "$files must post the approval request as today"
+  red_end
+done
+red_setup
+RC=0; OUT=$(STUB_OID="$SHA" STUB_META="$(meta blast:red src/lib/other/a.ts "" 0)" \
+  STUB_DIFF='diff --git a/src/lib/auth/a.ts b/src/lib/other/a.ts\nsimilarity index 100%\nrename from src/lib/auth/a.ts\nrename to src/lib/other/a.ts\n' \
+  gate --expect-head "$SHA" 2>&1) || RC=$?
+[ "$RC" -eq 7 ] || fail "a rename out of an excluded path must stay held, got $RC: $OUT"
+red_end
+
+# 26c — D40 widened (Max, 2026-11-05): the size cap is waived too. Red plus size merges; size alone merges; red plus a money
+#      hold label, or size plus an auth file, is held. Size alone outside #543 is held as today.
+red_setup; META_OVERRIDE="$(meta blast:red src/lib/tenancy/x.ts "" 500)"; red_gate
+[ "$RC" -eq 0 ] || fail "red plus size on a #543 descendant must merge, got $RC: $OUT"
+grep -q -- "--match-head-commit $SHA" "$GH_LOG" || fail "red plus size must merge pinned to the reviewed head"
+echo "$OUT" | grep -q "human-gate: size" && fail "the size hold must not be reported when the rule merged it"
+red_end
+red_setup; META_OVERRIDE="$(meta "" src/lib/tenancy/x.ts "" 500)"; red_gate
+[ "$RC" -eq 0 ] || fail "size alone on a #543 descendant must merge, got $RC: $OUT"
+[ "$(grep -c '^pr comment' "$GH_LOG")" -eq 1 ] || fail "the size-only merge must post one line"
+red_end
+red_setup; export STUB_PARENTS="42=100"; META_OVERRIDE="$(meta "" src/lib/tenancy/x.ts "" 500)"; red_gate
+[ "$RC" -eq 7 ] || fail "size alone outside #543 must stay held, got $RC: $OUT"
+echo "$OUT" | grep -q "human-gate: size" || fail "the size hold must still be named"
+grep -q '^pr merge' "$GH_LOG" && fail "size alone outside #543 must not merge"
+red_end
+red_setup; META_OVERRIDE="$(meta "" src/lib/auth/session.ts "" 500)"; red_gate
+[ "$RC" -eq 7 ] || fail "size plus an auth file must stay held, got $RC: $OUT"
+grep -q '^pr merge' "$GH_LOG" && fail "size plus an auth file must not merge"
+red_end
+red_setup; META_OVERRIDE="$(meta blast:red,money src/lib/tenancy/x.ts "" 10)"; red_gate
+[ "$RC" -eq 7 ] || fail "red plus a money hold label must stay held, got $RC: $OUT"
+red_end
+red_setup; META_OVERRIDE="$(meta blast:red,money src/lib/tenancy/x.ts "" 500)"; red_gate
+[ "$RC" -eq 7 ] || fail "red plus size plus a money hold label must stay held, got $RC: $OUT"
+red_end
+
+# 26d — an issue outside the roots, or no parent at all, is held.
+red_setup; export STUB_PARENTS="42=100"; red_gate
+[ "$RC" -eq 7 ] || fail "a red PR whose issue is not under #543 must stay held, got $RC: $OUT"
+red_end
+red_setup; export STUB_PARENTS=""; red_gate
+[ "$RC" -eq 7 ] || fail "a red PR whose issue has no parent must stay held, got $RC: $OUT"
+red_end
+
+# 26e — the Review must recommend Merge, on a trusted bot's comment, newer than the head commit.
+for case in "Do not merge|2099-01-01T00:00:00Z|robot[bot]|Bot" "Merge|2000-01-01T00:00:00Z|robot[bot]|Bot" "Merge|2099-01-01T00:00:00Z|someone|User" "Merge|2099-01-01T00:00:00Z|other[bot]|Bot"; do
+  IFS='|' read -r t at who ty <<<"$case"
+  red_setup; rec "$t" "$at" "$who" "$ty"; red_gate
+  [ "$RC" -eq 7 ] || fail "recommendation '$case' must leave the PR held, got $RC: $OUT"
+  grep -q '^pr merge' "$GH_LOG" && fail "recommendation '$case' must not merge"
+  red_end
+done
+red_setup; echo '[[]]' > "$STUB_COMMENTS"; red_gate
+[ "$RC" -eq 7 ] || fail "no recommendation must leave the PR held, got $RC: $OUT"
+red_end
+
+# 26f — red_auto_merge absent: today's behaviour, held. A DB migration that only the blast label holds merges under the rule.
+red_setup; cfgset 'del(.merge_policy.red_auto_merge)'; red_gate
+[ "$RC" -eq 7 ] || fail "without red_auto_merge a red PR stays held, got $RC: $OUT"
+red_end
+red_setup; cfgset '.migrations = {allowed_envs: ["staging"], target_env: "staging", commands: {staging: "-"}}'
+META_OVERRIDE="$(meta blast:red drizzle/0020_x.sql,src/lib/tenancy/schema.ts "" 10)"; red_gate
+[ "$RC" -eq 0 ] || fail "a red migration PR the deploy pipeline applies must merge under the rule, got $RC: $OUT"
+red_end
 
 echo "PASS: test-merge-gate.sh (merge, policy and approval scenarios)"

@@ -256,7 +256,7 @@ Minimal config at `.claude/super-board/configs/<slug>.json`:
   worker_backend        workflow | claude-p
   columns               Backlog · Ready · Building · QA · Review · Blocked · Done (always all seven)
   human_approves_merge  legacy: true = never auto-merge (prefer merge_policy.default "human")
-  merge_policy          default auto|human · auto_max_lines (400) · size_exclude · always_human {money, auth, schema}
+  merge_policy          default auto|human · auto_max_lines (400) · size_exclude · always_human {money, auth, schema} · red_auto_merge {roots, exclude_globs, label}
   migrations            globs · allowed_envs (test, staging, live) · target_env · commands
   verify_commands       run by the merge gate against the current base before every merge
   rebuild_cap           bounces allowed before a card goes Blocked
