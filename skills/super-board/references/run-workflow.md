@@ -350,6 +350,7 @@ don't stall on prompts:
     "Bash(bash .claude/bin/super-board-stop.sh:*)",
     "Bash(python3 .claude/bin/super-board-close-proof.py:*)",
     "Bash(bash .claude/bin/super-review-file-refactor.sh:*)",
+    "Bash(bash .claude/bin/super-board-role-rules.sh:*)",
     plus your project's test runners (e.g. "Bash(npm test:*)", "Bash(npx playwright:*)").
 
 `tests/test_run_allowlist.py` fails when pre-flight or a lane calls a `.claude/bin`
